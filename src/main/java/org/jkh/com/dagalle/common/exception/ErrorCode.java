@@ -1,0 +1,49 @@
+package org.jkh.com.dagalle.common.exception;
+
+import lombok.Getter;
+import org.springframework.http.HttpStatus;
+
+@Getter
+public enum ErrorCode {
+
+    // Common
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "요청 파라미터 오류"),
+    SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SERVER_ERROR", "서버 내부 오류"),
+
+    // Auth
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증 토큰 없음 또는 만료"),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "권한 없음"),
+    DUPLICATE_EMAIL(HttpStatus.CONFLICT, "CONFLICT", "이미 사용 중인 이메일"),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "이메일 또는 비밀번호가 일치하지 않습니다"),
+
+    // User
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "사용자를 찾을 수 없습니다"),
+
+    // Travel
+    TRAVEL_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "여행을 찾을 수 없습니다"),
+    TRAVEL_ACCESS_DENIED(HttpStatus.FORBIDDEN, "FORBIDDEN", "해당 여행에 접근 권한이 없습니다"),
+    ALREADY_MEMBER(HttpStatus.CONFLICT, "CONFLICT", "이미 팀원으로 등록된 사용자입니다"),
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "팀원을 찾을 수 없습니다"),
+    OWNER_CANNOT_LEAVE(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "OWNER는 내보낼 수 없습니다"),
+
+    // Plan
+    DAY_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "해당 날짜 일정을 찾을 수 없습니다"),
+    ROUTE_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "이동 구간을 찾을 수 없습니다"),
+
+    // Location
+    LOCATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "장소를 찾을 수 없습니다"),
+    EXTERNAL_API_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SERVER_ERROR", "외부 API 호출 실패"),
+
+    // Restaurant
+    RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "식당 정보를 찾을 수 없습니다");
+
+    private final HttpStatus status;
+    private final String code;
+    private final String message;
+
+    ErrorCode(HttpStatus status, String code, String message) {
+        this.status = status;
+        this.code = code;
+        this.message = message;
+    }
+}

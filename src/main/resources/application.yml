@@ -26,6 +26,15 @@ spring:
     console:
       enabled: false
 
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  default-produces-media-type: application/json
+
 jwt:
   secret: ${JWT_SECRET:dagalle-secret-key-must-be-at-least-32-characters-long}
   access-token-expiry: 1800000    # 30분

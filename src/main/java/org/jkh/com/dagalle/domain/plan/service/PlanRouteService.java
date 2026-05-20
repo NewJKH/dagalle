@@ -50,6 +50,7 @@ public class PlanRouteService {
                 .toLocation(to)
                 .transport(request.getTransport())
                 .departureTime(request.getDepartureTime())
+                .durationMinutes(request.getDurationMinutes())
                 .estimatedCost(request.getEstimatedCost())
                 .build();
         planRouteRepository.save(route);

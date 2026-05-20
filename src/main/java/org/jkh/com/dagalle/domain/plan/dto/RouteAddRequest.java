@@ -19,5 +19,6 @@ public class RouteAddRequest {
     private TransportType transport;
 
     private LocalDateTime departureTime;
+    private Integer durationMinutes;
     private Integer estimatedCost;
 }

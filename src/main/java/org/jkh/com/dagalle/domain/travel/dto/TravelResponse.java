@@ -18,6 +18,9 @@ public class TravelResponse {
     private LocalDate endDate;
     private TravelStatus status;
     private boolean isAiGenerated;
+    private String countryCode;
+    private Integer memberCount;
+    private Integer budgetTotal;
 
     public static TravelResponse from(TravelPlan plan) {
         return TravelResponse.builder()
@@ -29,6 +32,9 @@ public class TravelResponse {
                 .endDate(plan.getEndDate())
                 .status(plan.getStatus())
                 .isAiGenerated(plan.isAiGenerated())
+                .countryCode(plan.getCountryCode())
+                .memberCount(plan.getMemberCount())
+                .budgetTotal(plan.getBudgetTotal())
                 .build();
     }
 }

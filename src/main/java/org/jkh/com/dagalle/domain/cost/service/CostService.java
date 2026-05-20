@@ -3,12 +3,16 @@ package org.jkh.com.dagalle.domain.cost.service;
 import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
+import org.jkh.com.dagalle.domain.accommodation.entity.Accommodation;
+import org.jkh.com.dagalle.domain.accommodation.repository.AccommodationRepository;
 import org.jkh.com.dagalle.domain.cost.dto.CostSummaryResponse;
 import org.jkh.com.dagalle.domain.cost.dto.FuelCostRequest;
 import org.jkh.com.dagalle.domain.cost.dto.FuelCostResponse;
 import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
 import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
+import org.jkh.com.dagalle.domain.rental.entity.CarRental;
+import org.jkh.com.dagalle.domain.rental.repository.CarRentalRepository;
 import org.jkh.com.dagalle.domain.travel.entity.TravelPlan;
 import org.jkh.com.dagalle.domain.travel.repository.TravelMemberRepository;
 import org.jkh.com.dagalle.domain.travel.repository.TravelPlanRepository;
@@ -27,6 +31,8 @@ public class CostService {
     private final TravelMemberRepository travelMemberRepository;
     private final PlanDayRepository planDayRepository;
     private final UserRepository userRepository;
+    private final CarRentalRepository carRentalRepository;
+    private final AccommodationRepository accommodationRepository;
 
     @Transactional(readOnly = true)
     public CostSummaryResponse getSummary(Long userId, Long travelId) {
@@ -49,14 +55,31 @@ public class CostService {
                 .mapToInt(r -> r.getEstimatedCost() != null ? r.getEstimatedCost() : 0)
                 .sum();
 
-        int totalTransport = publicTransport + carCost;
+        // 렌트카 비용
+        List<CarRental> carRentals = carRentalRepository.findByTravelPlan(travel);
+        int rentalTotal = carRentals.stream()
+                .mapToInt(CarRental::totalCostKrw)
+                .sum();
+
+        // 렌트카 연료비
+        int rentalFuel = carRentals.stream()
+                .mapToInt(r -> r.getEstimatedFuelKrw() != null ? r.getEstimatedFuelKrw() : 0)
+                .sum();
+
+        // 숙박비
+        int accommodationTotal = accommodationRepository.findByTravelPlan(travel).stream()
+                .mapToInt(Accommodation::totalCostKrw)
+                .sum();
+
+        int totalKrw = publicTransport + carCost + rentalTotal + accommodationTotal;
 
         return CostSummaryResponse.builder()
-                .totalKrw(totalTransport)
+                .totalKrw(totalKrw)
                 .breakdown(CostSummaryResponse.Breakdown.builder()
                         .transport(publicTransport)
-                        .fuel(carCost)   // CAR 루트 비용은 fuel로 분류
-                        .accommodation(0)
+                        .fuel(carCost + rentalFuel)
+                        .accommodation(accommodationTotal)
+                        .rental(rentalTotal)
                         .food(0)
                         .etc(0)
                         .build())

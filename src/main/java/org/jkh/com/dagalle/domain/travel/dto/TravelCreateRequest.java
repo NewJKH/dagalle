@@ -23,4 +23,10 @@ public class TravelCreateRequest {
 
     @NotNull
     private LocalDate endDate;
+
+    private String countryCode = "JP";
+
+    private Integer memberCount = 1;
+
+    private Integer budgetTotal;
 }

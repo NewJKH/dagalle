@@ -42,6 +42,9 @@ public class TravelPlanService {
                 .endLocation(request.getEndLocation())
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
+                .countryCode(request.getCountryCode())
+                .memberCount(request.getMemberCount())
+                .budgetTotal(request.getBudgetTotal())
                 .build();
         travelPlanRepository.save(travel);
 

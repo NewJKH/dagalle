@@ -61,7 +61,7 @@ public class AiScheduleService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다. id=" + userId));
 
         // 1. Claude에게 일정 JSON 요청
-        String systemPrompt = buildGenerateSystemPrompt();
+        String systemPrompt = buildGenerateSystemPrompt(req.getCountryCode());
         String userMessage  = buildGenerateUserMessage(req);
 
         log.info("[AI 일정 생성] userId={}, {}→{}, {}~{}",
@@ -85,6 +85,9 @@ public class AiScheduleService {
                 .endLocation(req.getEndLocation())
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
+                .countryCode(req.getCountryCode())
+                .memberCount(req.getMemberCount())
+                .budgetTotal(req.getBudgetTotal())
                 .build();
         travelPlan.markAiGenerated();
         travelPlanRepository.save(travelPlan);
@@ -177,11 +180,7 @@ public class AiScheduleService {
     //  프롬프트 빌더
     // ──────────────────────────────────────────────
 
-    private String buildGenerateSystemPrompt() {
-        return """
-                당신은 한국 최고의 여행 일정 전문가입니다.
-                사용자의 요청을 받아 **반드시 JSON만** 응답하세요. 마크다운, 설명 텍스트, 코드 블록(```) 없이 순수 JSON만 출력하세요.
-
+    private static final String JSON_SCHEMA = """
                 응답 JSON 스키마:
                 {
                   "title": "여행 제목",
@@ -214,7 +213,28 @@ public class AiScheduleService {
                     }
                   ]
                 }
+            """;
 
+    private String buildGenerateSystemPrompt(String countryCode) {
+        if ("JP".equalsIgnoreCase(countryCode)) {
+            return """
+                    당신은 일본 여행 전문 플래너입니다.
+                    반드시 JSON만 응답하세요. 마크다운, 설명 텍스트, 코드 블록(```) 없이 순수 JSON만 출력하세요.
+                    """ + JSON_SCHEMA + """
+                    규칙:
+                    - 위도/경도는 일본 실제 좌표를 사용하세요.
+                    - 음식점은 일본 현지 유명 맛집 기준으로 추천하세요.
+                    - 이동 비용은 일본 실제 대중교통/택시 요금(엔→원 환산 1엔=9원) 기준으로 책정하세요.
+                    - 렌트카 이동 시 고속도로 톨비(구간당 약 500~2000엔)를 estimatedCost에 포함하세요.
+                    - routes 배열에서 첫 번째 route의 fromLocation은 숙소 또는 출발지, toLocation은 첫 방문지입니다.
+                    - 각 day마다 최소 4개 이상의 route를 포함하세요.
+                    """;
+        }
+        // KR 기본값
+        return """
+                당신은 한국 최고의 여행 일정 전문가입니다.
+                사용자의 요청을 받아 **반드시 JSON만** 응답하세요. 마크다운, 설명 텍스트, 코드 블록(```) 없이 순수 JSON만 출력하세요.
+                """ + JSON_SCHEMA + """
                 규칙:
                 - 위도/경도는 실제 좌표를 사용하세요 (한국 내 관광지 기준).
                 - routes 배열에서 첫 번째 route의 fromLocation은 숙소 또는 출발지, toLocation은 첫 방문지입니다.
@@ -230,6 +250,13 @@ public class AiScheduleService {
             case ACTIVE   -> "빡빡하게 (하루 6곳 이상, 최대한 많은 명소)";
         };
 
+        String keywordStr = req.getKeywords().isEmpty() ? "없음" : String.join(", ", req.getKeywords());
+        String themeStr   = req.getTheme() != null ? req.getTheme() : "일반 관광";
+        String budgetStr  = req.getBudgetTotal() != null ? req.getBudgetTotal() + "원" : "제한 없음";
+        String carStr     = req.isWithCar()
+                ? "렌트카 사용 (차량 이동 중심, 주차장 있는 장소 우선)"
+                : "대중교통";
+
         return String.format("""
                 다음 조건으로 여행 일정을 JSON으로 만들어주세요:
                 - 출발지: %s
@@ -238,6 +265,10 @@ public class AiScheduleService {
                 - 종료일: %s
                 - 여행 스타일: %s
                 - 인원수: %d명
+                - 음식/키워드: %s
+                - 여행 테마: %s
+                - 이동 수단: %s
+                - 예산: %s
 
                 실제 존재하는 유명 관광지, 맛집, 카페를 포함해주세요.
                 위도/경도는 정확한 실좌표를 사용해주세요.
@@ -248,7 +279,11 @@ public class AiScheduleService {
                 req.getStartDate(),
                 req.getEndDate(),
                 tendencyDesc,
-                req.getMemberCount()
+                req.getMemberCount(),
+                keywordStr,
+                themeStr,
+                carStr,
+                budgetStr
         );
     }
 

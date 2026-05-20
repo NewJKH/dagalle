@@ -35,7 +35,13 @@ public enum ErrorCode {
     EXTERNAL_API_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SERVER_ERROR", "외부 API 호출 실패"),
 
     // Restaurant
-    RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "식당 정보를 찾을 수 없습니다");
+    RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "식당 정보를 찾을 수 없습니다"),
+
+    // Rental
+    RENTAL_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "렌트카 정보를 찾을 수 없습니다"),
+
+    // Accommodation
+    ACCOMMODATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "숙박 정보를 찾을 수 없습니다");
 
     private final HttpStatus status;
     private final String code;

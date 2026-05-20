@@ -16,6 +16,7 @@ public class CostSummaryResponse {
         private Integer accommodation;
         private Integer food;
         private Integer fuel;
+        private Integer rental;
         private Integer etc;
     }
 }

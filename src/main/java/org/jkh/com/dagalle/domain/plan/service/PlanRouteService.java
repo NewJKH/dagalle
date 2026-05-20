@@ -8,11 +8,13 @@ import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
 import org.jkh.com.dagalle.domain.plan.client.GoogleRoutesClient;
 import org.jkh.com.dagalle.domain.plan.dto.PlanRouteResponse;
+import org.jkh.com.dagalle.domain.plan.fare.TransitFareRegistry;
 import org.jkh.com.dagalle.domain.plan.dto.ReorderRequest;
 import org.jkh.com.dagalle.domain.plan.dto.RouteAddRequest;
 import org.jkh.com.dagalle.domain.plan.dto.RouteUpdateRequest;
 import org.jkh.com.dagalle.domain.plan.entity.PlanDay;
 import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
+import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
 import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
 import org.jkh.com.dagalle.domain.travel.entity.TravelPlan;
@@ -39,6 +41,7 @@ public class PlanRouteService {
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
     private final GoogleRoutesClient googleRoutesClient;
+    private final TransitFareRegistry transitFareRegistry;
 
     @Transactional
     public PlanRouteResponse addRoute(Long userId, Long travelId, Integer dayNumber, RouteAddRequest request) {
@@ -67,16 +70,27 @@ public class PlanRouteService {
                     from.getName(), to.getName(), distanceKm, routeResult.durationMinutes());
         }
 
+        // Transit 요금 자동 계산 (SUBWAY, BUS, TRAIN이고 estimatedCost가 null인 경우)
+        Integer estimatedCost = request.getEstimatedCost();
+        TransportType transport = request.getTransport();
+        if (estimatedCost == null &&
+                (transport == TransportType.SUBWAY || transport == TransportType.BUS || transport == TransportType.TRAIN)) {
+            String countryCode = day.getTravelPlan().getCountryCode();
+            double calcDistanceKm = distanceKm != null ? distanceKm
+                    : haversineKm(from.getLat(), from.getLng(), to.getLat(), to.getLng());
+            estimatedCost = transitFareRegistry.calculate(countryCode, transport, calcDistanceKm).orElse(null);
+        }
+
         int nextSeq = planRouteRepository.countByPlanDay(day) + 1;
         PlanRoute route = PlanRoute.builder()
                 .planDay(day)
                 .sequence(nextSeq)
                 .fromLocation(from)
                 .toLocation(to)
-                .transport(request.getTransport())
+                .transport(transport)
                 .departureTime(request.getDepartureTime())
                 .durationMinutes(durationMinutes)
-                .estimatedCost(request.getEstimatedCost())
+                .estimatedCost(estimatedCost)
                 .distanceKm(distanceKm)
                 .build();
         return PlanRouteResponse.from(planRouteRepository.save(route));
@@ -112,6 +126,16 @@ public class PlanRouteService {
             if (route == null) throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
             route.updateSequence(i + 1);
         }
+    }
+
+    private double haversineKm(double lat1, double lng1, double lat2, double lng2) {
+        double R = 6371;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     private PlanDay getAccessibleDay(Long userId, Long travelId, Integer dayNumber) {

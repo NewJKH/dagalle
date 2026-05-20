@@ -44,12 +44,20 @@ public class TravelPlan {
     @Column(name = "is_ai_generated", nullable = false)
     private boolean isAiGenerated;
 
+    @Column(length = 2)
+    private String countryCode;
+
+    private Integer memberCount;
+
+    private Integer budgetTotal;
+
     @OneToMany(mappedBy = "travelPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TravelMember> members = new ArrayList<>();
 
     @Builder
     public TravelPlan(User owner, String title, String startLocation, String endLocation,
-                      LocalDate startDate, LocalDate endDate) {
+                      LocalDate startDate, LocalDate endDate,
+                      String countryCode, Integer memberCount, Integer budgetTotal) {
         this.owner = owner;
         this.title = title;
         this.startLocation = startLocation;
@@ -58,6 +66,9 @@ public class TravelPlan {
         this.endDate = endDate;
         this.status = TravelStatus.DRAFT;
         this.isAiGenerated = false;
+        this.countryCode = countryCode;
+        this.memberCount = memberCount;
+        this.budgetTotal = budgetTotal;
     }
 
     public void update(String title, String startLocation, String endLocation,
@@ -67,6 +78,12 @@ public class TravelPlan {
         if (endLocation != null) this.endLocation = endLocation;
         if (startDate != null) this.startDate = startDate;
         if (endDate != null) this.endDate = endDate;
+    }
+
+    public void updateCountryFields(String countryCode, Integer memberCount, Integer budgetTotal) {
+        if (countryCode != null) this.countryCode = countryCode;
+        if (memberCount != null) this.memberCount = memberCount;
+        if (budgetTotal != null) this.budgetTotal = budgetTotal;
     }
 
     public void markAiGenerated() {

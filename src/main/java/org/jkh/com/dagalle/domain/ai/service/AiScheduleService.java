@@ -5,6 +5,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jkh.com.dagalle.domain.accommodation.entity.Accommodation;
+import org.jkh.com.dagalle.domain.accommodation.repository.AccommodationRepository;
 import org.jkh.com.dagalle.domain.ai.client.ClaudeApiClient;
 import org.jkh.com.dagalle.domain.ai.dto.AiFillRequest;
 import org.jkh.com.dagalle.domain.ai.dto.AiGenerateRequest;
@@ -17,6 +19,8 @@ import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
 import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
 import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
+import org.jkh.com.dagalle.domain.rental.entity.CarRental;
+import org.jkh.com.dagalle.domain.rental.repository.CarRentalRepository;
 import org.jkh.com.dagalle.domain.travel.dto.TravelResponse;
 import org.jkh.com.dagalle.domain.travel.entity.MemberRole;
 import org.jkh.com.dagalle.domain.travel.entity.TravelMember;
@@ -49,6 +53,8 @@ public class AiScheduleService {
     private final PlanDayRepository planDayRepository;
     private final PlanRouteRepository planRouteRepository;
     private final LocationRepository locationRepository;
+    private final CarRentalRepository carRentalRepository;
+    private final AccommodationRepository accommodationRepository;
     private final ObjectMapper objectMapper;
 
     // ──────────────────────────────────────────────
@@ -100,7 +106,46 @@ public class AiScheduleService {
                 .build();
         travelMemberRepository.save(ownerMember);
 
-        // 4. PlanDay + PlanRoute 저장
+        // 4. 렌트카 추천 저장 (withCar=true이고 AI가 제안한 경우)
+        JsonNode rentalNode = schedule.path("rentalCar");
+        if (req.isWithCar() && !rentalNode.isMissingNode() && !rentalNode.isNull()) {
+            CarRental carRental = CarRental.builder()
+                    .travelPlan(travelPlan)
+                    .carType(rentalNode.path("carType").asText(null))
+                    .dailyRateKrw(nodeIntOrNull(rentalNode, "dailyRateKrw"))
+                    .rentalDays(nodeIntOrNull(rentalNode, "rentalDays"))
+                    .estimatedFuelKrw(nodeIntOrNull(rentalNode, "estimatedFuelKrw"))
+                    .estimatedTollKrw(nodeIntOrNull(rentalNode, "estimatedTollKrw"))
+                    .build();
+            carRentalRepository.save(carRental);
+            log.info("[AI 렌트카 저장] {} {}원/일 × {}일", carRental.getCarType(),
+                    carRental.getDailyRateKrw(), carRental.getRentalDays());
+        }
+
+        // 5. 숙박 추천 저장
+        JsonNode accommodationsNode = schedule.path("accommodations");
+        if (accommodationsNode.isArray()) {
+            for (JsonNode accNode : accommodationsNode) {
+                String checkInStr  = accNode.path("checkIn").asText(null);
+                String checkOutStr = accNode.path("checkOut").asText(null);
+                if (checkInStr == null || checkOutStr == null) continue;
+                try {
+                    Accommodation acc = Accommodation.builder()
+                            .travelPlan(travelPlan)
+                            .hotelName(accNode.path("hotelName").asText("추천 숙소"))
+                            .checkIn(LocalDate.parse(checkInStr))
+                            .checkOut(LocalDate.parse(checkOutStr))
+                            .pricePerNightKrw(nodeIntOrNull(accNode, "pricePerNightKrw"))
+                            .build();
+                    accommodationRepository.save(acc);
+                    log.info("[AI 숙박 저장] {} {}~{}", acc.getHotelName(), checkInStr, checkOutStr);
+                } catch (Exception e) {
+                    log.warn("[AI 숙박 파싱 실패] {}", accNode, e);
+                }
+            }
+        }
+
+        // 6. PlanDay + PlanRoute 저장
         JsonNode days = schedule.path("days");
         for (JsonNode dayNode : days) {
             int dayNumber = dayNode.path("dayNumber").asInt(1);
@@ -184,6 +229,21 @@ public class AiScheduleService {
                 응답 JSON 스키마:
                 {
                   "title": "여행 제목",
+                  "rentalCar": {
+                    "carType": "차종 (예: Toyota Aqua 하이브리드)",
+                    "dailyRateKrw": 1일렌트비(원, 숫자만),
+                    "rentalDays": 렌트기간(일, 숫자만),
+                    "estimatedFuelKrw": 예상연료비(원, 숫자만),
+                    "estimatedTollKrw": 예상톨비(원, 숫자만)
+                  },
+                  "accommodations": [
+                    {
+                      "hotelName": "호텔명",
+                      "checkIn": "YYYY-MM-DD",
+                      "checkOut": "YYYY-MM-DD",
+                      "pricePerNightKrw": 1박요금(원, 숫자만)
+                    }
+                  ],
                   "days": [
                     {
                       "dayNumber": 1,
@@ -228,6 +288,9 @@ public class AiScheduleService {
                     - 렌트카 이동 시 고속도로 톨비(구간당 약 500~2000엔)를 estimatedCost에 포함하세요.
                     - routes 배열에서 첫 번째 route의 fromLocation은 숙소 또는 출발지, toLocation은 첫 방문지입니다.
                     - 각 day마다 최소 4개 이상의 route를 포함하세요.
+                    - rentalCar: withCar=true일 때만 채우세요. 일본 렌트카 시세 기준(경차 5,000~8,000엔/일, 하이브리드 7,000~10,000엔/일). 1엔=9원 환산.
+                    - accommodations: 여행 기간 동안의 숙소를 1~2곳 추천하세요. 일본 비즈니스호텔 기준(도심 8,000~15,000엔/박, 1엔=9원 환산). 예약은 사용자가 직접 합니다.
+                    - rentalCar 또는 accommodations가 해당 없으면 null로 두세요.
                     """;
         }
         // KR 기본값
@@ -240,6 +303,9 @@ public class AiScheduleService {
                 - routes 배열에서 첫 번째 route의 fromLocation은 숙소 또는 출발지, toLocation은 첫 방문지입니다.
                 - 각 day마다 최소 4개 이상의 route를 포함하세요.
                 - 이동 비용은 실제 대중교통/택시 요금 기준으로 책정하세요.
+                - accommodations: 여행 기간 동안의 숙소를 추천하세요 (한국 호텔 기준).
+                - rentalCar: withCar=true일 때만 채우세요.
+                - rentalCar 또는 accommodations가 해당 없으면 null로 두세요.
                 """;
     }
 
@@ -395,5 +461,10 @@ public class AiScheduleService {
 
     private long daysBetween(LocalDate start, LocalDate end) {
         return start.until(end).getDays() + 1;
+    }
+
+    private Integer nodeIntOrNull(JsonNode node, String field) {
+        JsonNode n = node.path(field);
+        return (n.isMissingNode() || n.isNull()) ? null : n.asInt();
     }
 }

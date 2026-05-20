@@ -46,6 +46,7 @@ external-api:
     base-url: https://dapi.kakao.com
   google:
     key: ${GOOGLE_API_KEY:}
+    places-url: https://places.googleapis.com/v1
     directions-url: https://maps.googleapis.com/maps/api/directions/json
   claude:
     key: ${CLAUDE_API_KEY:}

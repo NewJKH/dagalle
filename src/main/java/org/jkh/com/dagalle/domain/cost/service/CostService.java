@@ -37,18 +37,27 @@ public class CostService {
                 .flatMap(day -> day.getRoutes().stream())
                 .toList();
 
-        int transport = allRoutes.stream()
+        // 대중교통 비용 (지하철, 버스, 기차, 도보)
+        int publicTransport = allRoutes.stream()
                 .filter(r -> r.getTransport() != TransportType.CAR)
                 .mapToInt(r -> r.getEstimatedCost() != null ? r.getEstimatedCost() : 0)
                 .sum();
 
+        // 자동차 이동 예상 비용 (주차비, 통행료 등 estimatedCost에 입력된 값)
+        int carCost = allRoutes.stream()
+                .filter(r -> r.getTransport() == TransportType.CAR)
+                .mapToInt(r -> r.getEstimatedCost() != null ? r.getEstimatedCost() : 0)
+                .sum();
+
+        int totalTransport = publicTransport + carCost;
+
         return CostSummaryResponse.builder()
-                .totalKrw(transport)
+                .totalKrw(totalTransport)
                 .breakdown(CostSummaryResponse.Breakdown.builder()
-                        .transport(transport)
+                        .transport(publicTransport)
+                        .fuel(carCost)   // CAR 루트 비용은 fuel로 분류
                         .accommodation(0)
                         .food(0)
-                        .fuel(0)
                         .etc(0)
                         .build())
                 .build();

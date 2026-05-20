@@ -27,11 +27,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validate(token)) {
-            Long userId = jwtTokenProvider.getUserId(token);
-            UserDetails userDetails = userDetailsService.loadUserById(userId);
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-            SecurityContextHolder.getContext().setAuthentication(auth);
+            try {
+                Long userId = jwtTokenProvider.getUserId(token);
+                UserDetails userDetails = userDetailsService.loadUserById(userId);
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } catch (Exception e) {
+                // DB에 없는 userId의 유효한 JWT → 인증 컨텍스트 세팅 생략
+                // AuthenticationEntryPoint가 401로 처리
+                SecurityContextHolder.clearContext();
+            }
         }
 
         filterChain.doFilter(request, response);

@@ -4,10 +4,10 @@ import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.jkh.com.dagalle.common.security.JwtTokenProvider;
+import org.jkh.com.dagalle.common.token.TokenStore;
 import org.jkh.com.dagalle.domain.user.dto.*;
 import org.jkh.com.dagalle.domain.user.entity.User;
 import org.jkh.com.dagalle.domain.user.repository.UserRepository;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +21,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final StringRedisTemplate redisTemplate;
+    private final TokenStore tokenStore;
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -46,7 +46,7 @@ public class AuthService {
         }
         String accessToken = jwtTokenProvider.createAccessToken(user.getId());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
-        redisTemplate.opsForValue().set("refresh:" + user.getId(), refreshToken, Duration.ofDays(7));
+        tokenStore.save("refresh:" + user.getId(), refreshToken, Duration.ofDays(7));
         return LoginResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
@@ -56,7 +56,7 @@ public class AuthService {
     }
 
     public void logout(Long userId) {
-        redisTemplate.delete("refresh:" + userId);
+        tokenStore.delete("refresh:" + userId);
     }
 
     public LoginResponse refresh(RefreshRequest request) {
@@ -65,13 +65,13 @@ public class AuthService {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
         Long userId = jwtTokenProvider.getUserId(token);
-        String stored = redisTemplate.opsForValue().get("refresh:" + userId);
+        String stored = tokenStore.get("refresh:" + userId);
         if (!token.equals(stored)) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
         String newAccess = jwtTokenProvider.createAccessToken(userId);
         String newRefresh = jwtTokenProvider.createRefreshToken(userId);
-        redisTemplate.opsForValue().set("refresh:" + userId, newRefresh, Duration.ofDays(7));
+        tokenStore.save("refresh:" + userId, newRefresh, Duration.ofDays(7));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         return LoginResponse.builder()

@@ -5,6 +5,7 @@ import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
+import org.jkh.com.dagalle.domain.plan.dto.PlanRouteResponse;
 import org.jkh.com.dagalle.domain.plan.dto.ReorderRequest;
 import org.jkh.com.dagalle.domain.plan.dto.RouteAddRequest;
 import org.jkh.com.dagalle.domain.plan.dto.RouteUpdateRequest;
@@ -36,7 +37,7 @@ public class PlanRouteService {
     private final UserRepository userRepository;
 
     @Transactional
-    public void addRoute(Long userId, Long travelId, Integer dayNumber, RouteAddRequest request) {
+    public PlanRouteResponse addRoute(Long userId, Long travelId, Integer dayNumber, RouteAddRequest request) {
         PlanDay day = getAccessibleDay(userId, travelId, dayNumber);
         Location from = locationRepository.findById(request.getFromLocationId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_NOT_FOUND));
@@ -53,7 +54,7 @@ public class PlanRouteService {
                 .durationMinutes(request.getDurationMinutes())
                 .estimatedCost(request.getEstimatedCost())
                 .build();
-        planRouteRepository.save(route);
+        return PlanRouteResponse.from(planRouteRepository.save(route));
     }
 
     @Transactional

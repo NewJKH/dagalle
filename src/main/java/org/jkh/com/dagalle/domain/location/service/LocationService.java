@@ -37,7 +37,7 @@ public class LocationService {
                 .lat(request.getLat())
                 .lng(request.getLng())
                 .type(request.getType() != null ? request.getType() : LocationType.ETC)
-                .source(LocationSource.AI)   // 수동 입력도 AI 소스로 구분
+                .source(LocationSource.USER)
                 .build();
         return LocationResponse.from(locationRepository.save(location));
     }

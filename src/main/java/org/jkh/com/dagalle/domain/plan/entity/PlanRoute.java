@@ -44,10 +44,14 @@ public class PlanRoute {
     @Column(name = "estimated_cost")
     private Integer estimatedCost;
 
+    /** Routes API로 계산된 실제 이동거리 (km) */
+    @Column(name = "distance_km")
+    private Double distanceKm;
+
     @Builder
     public PlanRoute(PlanDay planDay, Integer sequence, Location fromLocation, Location toLocation,
                      TransportType transport, LocalDateTime departureTime,
-                     Integer durationMinutes, Integer estimatedCost) {
+                     Integer durationMinutes, Integer estimatedCost, Double distanceKm) {
         this.planDay = planDay;
         this.sequence = sequence;
         this.fromLocation = fromLocation;
@@ -56,6 +60,7 @@ public class PlanRoute {
         this.departureTime = departureTime;
         this.durationMinutes = durationMinutes;
         this.estimatedCost = estimatedCost;
+        this.distanceKm = distanceKm;
     }
 
     public void update(TransportType transport, LocalDateTime departureTime,

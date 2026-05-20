@@ -70,8 +70,12 @@ public class CostService {
         double totalCarDistanceKm = planDayRepository.findByTravelPlanOrderByDayNumberAsc(travel)
                 .stream()
                 .flatMap(day -> day.getRoutes().stream())
-                .filter(r -> r.getTransport() == TransportType.CAR && r.getDurationMinutes() != null)
-                .mapToDouble(r -> r.getDurationMinutes() * 0.8)  // 평균 속도 48km/h 가정
+                .filter(r -> r.getTransport() == TransportType.CAR)
+                .mapToDouble(r -> {
+                    if (r.getDistanceKm() != null) return r.getDistanceKm();           // Routes API 값 우선
+                    if (r.getDurationMinutes() != null) return r.getDurationMinutes() * 0.8; // 폴백: 48km/h 추정
+                    return 0;
+                })
                 .sum();
 
         double requiredLiters = totalCarDistanceKm / request.getVehicleFuelEfficiency();

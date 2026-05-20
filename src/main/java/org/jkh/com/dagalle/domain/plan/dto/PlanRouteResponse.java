@@ -17,6 +17,7 @@ public class PlanRouteResponse {
     private TransportType transport;
     private LocalDateTime departureTime;
     private Integer durationMinutes;
+    private Double distanceKm;
     private Integer estimatedCost;
 
     public static PlanRouteResponse from(PlanRoute route) {
@@ -34,6 +35,7 @@ public class PlanRouteResponse {
                 .transport(route.getTransport())
                 .departureTime(route.getDepartureTime())
                 .durationMinutes(route.getDurationMinutes())
+                .distanceKm(route.getDistanceKm())
                 .estimatedCost(route.getEstimatedCost())
                 .build();
     }

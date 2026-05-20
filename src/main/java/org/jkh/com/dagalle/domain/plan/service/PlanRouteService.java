@@ -1,10 +1,12 @@
 package org.jkh.com.dagalle.domain.plan.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
+import org.jkh.com.dagalle.domain.plan.client.GoogleRoutesClient;
 import org.jkh.com.dagalle.domain.plan.dto.PlanRouteResponse;
 import org.jkh.com.dagalle.domain.plan.dto.ReorderRequest;
 import org.jkh.com.dagalle.domain.plan.dto.RouteAddRequest;
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PlanRouteService {
@@ -35,6 +38,7 @@ public class PlanRouteService {
     private final TravelMemberRepository travelMemberRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
+    private final GoogleRoutesClient googleRoutesClient;
 
     @Transactional
     public PlanRouteResponse addRoute(Long userId, Long travelId, Integer dayNumber, RouteAddRequest request) {
@@ -43,6 +47,26 @@ public class PlanRouteService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_NOT_FOUND));
         Location to = locationRepository.findById(request.getToLocationId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_NOT_FOUND));
+        // Google Routes API로 실제 거리/시간 계산 (실패 시 요청값 사용)
+        Double distanceKm = null;
+        Integer durationMinutes = request.getDurationMinutes();
+
+        GoogleRoutesClient.RouteResult routeResult = googleRoutesClient.computeRoute(
+                from.getLat(), from.getLng(),
+                to.getLat(), to.getLng(),
+                request.getTransport(),
+                request.getDepartureTime()
+        );
+        if (routeResult != null) {
+            distanceKm = Math.round(routeResult.distanceKm() * 10.0) / 10.0;
+            // 요청에 durationMinutes가 없으면 API 결과로 채움
+            if (durationMinutes == null) {
+                durationMinutes = routeResult.durationMinutes();
+            }
+            log.info("Routes API: {}→{} {}km {}분",
+                    from.getName(), to.getName(), distanceKm, routeResult.durationMinutes());
+        }
+
         int nextSeq = planRouteRepository.countByPlanDay(day) + 1;
         PlanRoute route = PlanRoute.builder()
                 .planDay(day)
@@ -51,8 +75,9 @@ public class PlanRouteService {
                 .toLocation(to)
                 .transport(request.getTransport())
                 .departureTime(request.getDepartureTime())
-                .durationMinutes(request.getDurationMinutes())
+                .durationMinutes(durationMinutes)
                 .estimatedCost(request.getEstimatedCost())
+                .distanceKm(distanceKm)
                 .build();
         return PlanRouteResponse.from(planRouteRepository.save(route));
     }

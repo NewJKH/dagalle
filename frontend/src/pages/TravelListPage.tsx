@@ -214,13 +214,59 @@ function LoadingSkeleton() {
   )
 }
 
+/* ── 선호도 슬라이더 컴포넌트 ── */
+const PREF_CATEGORIES = [
+  { key: 'food',          emoji: '🍜', label: '음식' },
+  { key: 'accommodation', emoji: '🏨', label: '숙박' },
+  { key: 'extreme',       emoji: '🎯', label: '익스트림' },
+  { key: 'transport',     emoji: '🚇', label: '이동' },
+] as const
+
+type PrefKey = typeof PREF_CATEGORIES[number]['key']
+type Prefs = Record<PrefKey, number>
+
+function PreferenceSliders({ prefs, onChange }: { prefs: Prefs; onChange: (p: Prefs) => void }) {
+  return (
+    <div style={{ background: '#F8F8FF', border: '1px solid #E0E0F0', borderRadius: 10, padding: '14px 16px' }}>
+      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#555', marginBottom: 12 }}>
+        🎛️ 여행 맞춤 선호도 <span style={{ fontWeight: 400, color: '#BBB' }}>(0~10)</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {PREF_CATEGORIES.map(({ key, emoji, label }) => (
+          <div key={key} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 28px', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444' }}>{emoji} {label}</span>
+            <input
+              type="range" min={0} max={10} step={1}
+              value={prefs[key]}
+              onChange={e => onChange({ ...prefs, [key]: Number(e.target.value) })}
+              style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
+            />
+            <span style={{
+              fontSize: '0.82rem', fontWeight: 800, textAlign: 'center',
+              color: prefs[key] >= 8 ? 'var(--primary)' : prefs[key] >= 5 ? '#0984E3' : '#999',
+            }}>{prefs[key]}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, fontSize: '0.71rem', color: '#AAA', lineHeight: 1.5 }}>
+        점수가 높을수록 해당 항목에 더 많은 일정·예산을 배분합니다
+      </div>
+    </div>
+  )
+}
+
 /* ── 여행 생성 모달 ── */
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: TravelPlan) => void }) {
   const saved = readSearch()
+  const today = new Date().toISOString().split('T')[0]
 
   const [tab, setTab] = useState<'natural' | 'ai'>('natural')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+
+  const defaultPrefs: Prefs = { food: 5, accommodation: 5, extreme: 5, transport: 5 }
+  const [natPrefs, setNatPrefs] = useState<Prefs>(defaultPrefs)
+  const [aiPrefs,  setAiPrefs]  = useState<Prefs>(defaultPrefs)
 
   // 자유 입력
   const [nat, setNat] = useState({
@@ -265,7 +311,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const res = await fetch('/api/v1/travels/ai/init/natural', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ startLocation: nat.startLocation, startDate: nat.startDate, endDate: nat.endDate, memberCount: nat.memberCount, naturalInput: nat.naturalInput.trim() }),
+        body: JSON.stringify({ startLocation: nat.startLocation, startDate: nat.startDate, endDate: nat.endDate, memberCount: nat.memberCount, naturalInput: nat.naturalInput.trim(), foodScore: natPrefs.food, accommodationScore: natPrefs.accommodation, extremeScore: natPrefs.extreme, transportScore: natPrefs.transport }),
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
@@ -282,7 +328,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const res = await fetch('/api/v1/travels/ai/init', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...ai, theme: ai.theme || null, budgetTotal: ai.budgetTotal ? Number(ai.budgetTotal) : null, departureFlightTime: ai.departureFlightTime || null, arrivalAtDestTime: ai.arrivalAtDestTime || null, returnFlightTime: ai.returnFlightTime || null }),
+        body: JSON.stringify({ ...ai, theme: ai.theme || null, budgetTotal: ai.budgetTotal ? Number(ai.budgetTotal) : null, departureFlightTime: ai.departureFlightTime || null, arrivalAtDestTime: ai.arrivalAtDestTime || null, returnFlightTime: ai.returnFlightTime || null, foodScore: aiPrefs.food, accommodationScore: aiPrefs.accommodation, extremeScore: aiPrefs.extreme, transportScore: aiPrefs.transport }),
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
@@ -334,14 +380,22 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {([['출발일', 'startDate'], ['귀국일', 'endDate']] as const).map(([label, key]) => (
-                <div key={key}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>{label}</label>
-                  <input type="date" value={nat[key]} required onChange={e => setNat(f => ({...f, [key]: e.target.value}))} style={inputSt}
-                    onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                    onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
-                </div>
-              ))}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
+                <input type="date" value={nat.startDate} required min={today}
+                  onChange={e => setNat(f => ({...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? '' : f.endDate}))}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
+                <input type="date" value={nat.endDate} required min={nat.startDate || today}
+                  onChange={e => setNat(f => ({...f, endDate: e.target.value}))}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+              </div>
             </div>
 
             <div>
@@ -365,6 +419,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
               />
             </div>
+
+            <PreferenceSliders prefs={natPrefs} onChange={setNatPrefs} />
 
             <button type="submit" disabled={loading} style={{
               padding: '13px', borderRadius: 10, fontSize: '0.92rem', fontWeight: 800,
@@ -413,14 +469,22 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
             {/* 날짜 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {([['출발일','startDate'],['귀국일','endDate']] as const).map(([label, key]) => (
-                <div key={key}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>{label}</label>
-                  <input type="date" value={ai[key as keyof typeof ai] as string} required onChange={e => setAi(f => ({...f, [key]: e.target.value}))} style={inputSt}
-                    onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                    onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
-                </div>
-              ))}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
+                <input type="date" value={ai.startDate} required min={today}
+                  onChange={e => setAi(f => ({...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? '' : f.endDate}))}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
+                <input type="date" value={ai.endDate} required min={ai.startDate || today}
+                  onChange={e => setAi(f => ({...f, endDate: e.target.value}))}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+              </div>
             </div>
 
             {/* 인원 */}
@@ -501,6 +565,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 ))}
               </div>
             </div>
+
+            <PreferenceSliders prefs={aiPrefs} onChange={setAiPrefs} />
 
             <button type="submit" disabled={loading} style={{
               padding: '13px', borderRadius: 10, fontSize: '0.92rem', fontWeight: 800,

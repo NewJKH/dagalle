@@ -50,7 +50,7 @@ export default function TravelListPage() {
     if (!token) { navigate('/login'); return }
     fetch('/api/v1/travels', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(d => setPlans(d.data?.content ?? []))
+      .then(d => setPlans(Array.isArray(d.data) ? d.data : (d.data?.content ?? [])))
       .catch(() => setPlans([]))
       .finally(() => setLoading(false))
   }, [navigate])
@@ -214,6 +214,7 @@ function LoadingSkeleton() {
   )
 }
 
+<<<<<<< Updated upstream
 /* ── 선호도 슬라이더 컴포넌트 ── */
 const PREF_CATEGORIES = [
   { key: 'food',          emoji: '🍜', label: '음식' },
@@ -244,13 +245,51 @@ function PreferenceSliders({ prefs, onChange }: { prefs: Prefs; onChange: (p: Pr
             <span style={{
               fontSize: '0.82rem', fontWeight: 800, textAlign: 'center',
               color: prefs[key] >= 8 ? 'var(--primary)' : prefs[key] >= 5 ? '#0984E3' : '#999',
+=======
+/* ── 선호도 슬라이더 ── */
+type Prefs = { food: number; accommodation: number; extreme: number; transport: number }
+
+function PreferenceSliders({ prefs, setPrefs }: {
+  prefs: Prefs
+  setPrefs: React.Dispatch<React.SetStateAction<Prefs>>
+}) {
+  const items: { key: keyof Prefs; icon: string; label: string }[] = [
+    { key: 'food',          icon: '🍜', label: '음식' },
+    { key: 'accommodation', icon: '🏨', label: '숙박' },
+    { key: 'extreme',       icon: '🎯', label: '익스트림' },
+    { key: 'transport',     icon: '🚇', label: '이동' },
+  ]
+
+  return (
+    <div style={{ background: '#F8F8F8', borderRadius: 10, padding: '14px', border: '1px solid #EBEBEB' }}>
+      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#555', marginBottom: 12 }}>
+        ⚙️ 항목별 선호도 <span style={{ fontWeight: 400, color: '#BBB' }}>(0 = 관심없음 / 10 = 최우선)</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map(({ key, icon, label }) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: '1rem', width: 22, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#444', width: 52, flexShrink: 0 }}>{label}</span>
+            <input
+              type="range" min={0} max={10} step={1}
+              value={prefs[key]}
+              onChange={e => setPrefs(p => ({ ...p, [key]: Number(e.target.value) }))}
+              style={{ flex: 1, accentColor: 'var(--primary)', cursor: 'pointer', height: 4 }}
+            />
+            <span style={{
+              fontSize: '0.82rem', fontWeight: 800, width: 28, textAlign: 'center', flexShrink: 0,
+              color: prefs[key] >= 8 ? 'var(--primary)' : prefs[key] >= 5 ? '#0984E3' : '#888',
+>>>>>>> Stashed changes
             }}>{prefs[key]}</span>
           </div>
         ))}
       </div>
+<<<<<<< Updated upstream
       <div style={{ marginTop: 10, fontSize: '0.71rem', color: '#AAA', lineHeight: 1.5 }}>
         점수가 높을수록 해당 항목에 더 많은 일정·예산을 배분합니다
       </div>
+=======
+>>>>>>> Stashed changes
     </div>
   )
 }
@@ -260,13 +299,21 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const saved = readSearch()
   const today = new Date().toISOString().split('T')[0]
 
+  const today = new Date().toISOString().split('T')[0]
+
   const [tab, setTab] = useState<'natural' | 'ai'>('natural')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
+<<<<<<< Updated upstream
   const defaultPrefs: Prefs = { food: 5, accommodation: 5, extreme: 5, transport: 5 }
   const [natPrefs, setNatPrefs] = useState<Prefs>(defaultPrefs)
   const [aiPrefs,  setAiPrefs]  = useState<Prefs>(defaultPrefs)
+=======
+  // 선호도 점수 (0~10)
+  const [natPrefs, setNatPrefs] = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
+  const [aiPrefs, setAiPrefs]   = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
+>>>>>>> Stashed changes
 
   // 자유 입력
   const [nat, setNat] = useState({
@@ -311,7 +358,21 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const res = await fetch('/api/v1/travels/ai/init/natural', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+<<<<<<< Updated upstream
         body: JSON.stringify({ startLocation: nat.startLocation, startDate: nat.startDate, endDate: nat.endDate, memberCount: nat.memberCount, naturalInput: nat.naturalInput.trim(), foodScore: natPrefs.food, accommodationScore: natPrefs.accommodation, extremeScore: natPrefs.extreme, transportScore: natPrefs.transport }),
+=======
+        body: JSON.stringify({
+          startLocation: nat.startLocation,
+          startDate: nat.startDate,
+          endDate: nat.endDate,
+          memberCount: nat.memberCount,
+          naturalInput: nat.naturalInput.trim(),
+          foodScore: natPrefs.food,
+          accommodationScore: natPrefs.accommodation,
+          extremeScore: natPrefs.extreme,
+          transportScore: natPrefs.transport,
+        }),
+>>>>>>> Stashed changes
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
@@ -328,7 +389,22 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const res = await fetch('/api/v1/travels/ai/init', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+<<<<<<< Updated upstream
         body: JSON.stringify({ ...ai, theme: ai.theme || null, budgetTotal: ai.budgetTotal ? Number(ai.budgetTotal) : null, departureFlightTime: ai.departureFlightTime || null, arrivalAtDestTime: ai.arrivalAtDestTime || null, returnFlightTime: ai.returnFlightTime || null, foodScore: aiPrefs.food, accommodationScore: aiPrefs.accommodation, extremeScore: aiPrefs.extreme, transportScore: aiPrefs.transport }),
+=======
+        body: JSON.stringify({
+          ...ai,
+          theme: ai.theme || null,
+          budgetTotal: ai.budgetTotal ? Number(ai.budgetTotal) : null,
+          departureFlightTime: ai.departureFlightTime || null,
+          arrivalAtDestTime: ai.arrivalAtDestTime || null,
+          returnFlightTime: ai.returnFlightTime || null,
+          foodScore: aiPrefs.food,
+          accommodationScore: aiPrefs.accommodation,
+          extremeScore: aiPrefs.extreme,
+          transportScore: aiPrefs.transport,
+        }),
+>>>>>>> Stashed changes
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
@@ -379,9 +455,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               <AutocompleteInput value={nat.startLocation} onChange={v => setNat(f => ({...f, startLocation: v}))} options={DEPARTURE_OPTIONS} placeholder="인천국제공항" required />
             </div>
 
+            {/* 날짜 (과거 선택 불가 + 귀국일은 출발일 이후만) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
+<<<<<<< Updated upstream
                 <input type="date" value={nat.startDate} required min={today}
                   onChange={e => setNat(f => ({...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? '' : f.endDate}))}
                   style={inputSt}
@@ -395,6 +473,30 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   style={inputSt}
                   onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
                   onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+=======
+                <input
+                  type="date" value={nat.startDate} required
+                  min={today}
+                  onChange={e => {
+                    const d = e.target.value
+                    setNat(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate }))
+                  }}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
+                <input
+                  type="date" value={nat.endDate} required
+                  min={nat.startDate || today}
+                  onChange={e => setNat(f => ({...f, endDate: e.target.value}))}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
+                />
+>>>>>>> Stashed changes
               </div>
             </div>
 
@@ -404,6 +506,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}명{n===1?' (혼자)':n===2?' (커플)':''}</option>)}
               </select>
             </div>
+
+            {/* 선호도 슬라이더 */}
+            <PreferenceSliders prefs={natPrefs} setPrefs={setNatPrefs} />
 
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>
@@ -467,10 +572,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 placeholder={ai.countryCode === 'JP' ? '도쿄, 오사카, 삿포로...' : '부산, 제주, 강릉...'} required />
             </div>
 
-            {/* 날짜 */}
+            {/* 날짜 (과거 선택 불가 + 귀국일은 출발일 이후만) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
+<<<<<<< Updated upstream
                 <input type="date" value={ai.startDate} required min={today}
                   onChange={e => setAi(f => ({...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? '' : f.endDate}))}
                   style={inputSt}
@@ -484,6 +590,30 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   style={inputSt}
                   onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
                   onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+=======
+                <input
+                  type="date" value={ai.startDate} required
+                  min={today}
+                  onChange={e => {
+                    const d = e.target.value
+                    setAi(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate }))
+                  }}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
+                <input
+                  type="date" value={ai.endDate} required
+                  min={ai.startDate || today}
+                  onChange={e => setAi(f => ({...f, endDate: e.target.value}))}
+                  style={inputSt}
+                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
+                />
+>>>>>>> Stashed changes
               </div>
             </div>
 
@@ -528,6 +658,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 ))}
               </div>
             </div>
+
+            {/* 선호도 슬라이더 */}
+            <PreferenceSliders prefs={aiPrefs} setPrefs={setAiPrefs} />
 
             {/* 키워드 */}
             <div>

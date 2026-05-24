@@ -10,8 +10,9 @@ export default defineConfig({
       // /api/v1/... → http://localhost:8080/api/v1/...
       // React Router 경로(/travels, /login 등)와 충돌 없이 API만 포워딩
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
+        secure: false,
       },
     },
   },

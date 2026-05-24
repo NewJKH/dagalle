@@ -33,7 +33,6 @@ function formatDate(str: string) {
   return `${y}.${m}.${d}`
 }
 
-// sessionStorage에서 저장된 검색값 읽기
 function readSearch() {
   try { return JSON.parse(sessionStorage.getItem(SEARCH_KEY) || '{}') } catch { return {} }
 }
@@ -67,10 +66,7 @@ export default function TravelListPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#FAFAFA' }}>
       <Navbar />
-
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '88px 32px 64px' }}>
-
-        {/* 헤더 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1A1A1A', letterSpacing: '-0.02em' }}>내 여행 목록</h1>
@@ -87,7 +83,6 @@ export default function TravelListPage() {
           >+ 새 여행 만들기</button>
         </div>
 
-        {/* 필터 탭 + 카운트 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 20, background: '#fff', borderRadius: 10, padding: 4, border: '1px solid #F0F0F0', width: 'fit-content' }}>
           {([
             { key: 'all',       label: `전체 ${plans.length}` },
@@ -103,7 +98,6 @@ export default function TravelListPage() {
           ))}
         </div>
 
-        {/* 리스트 */}
         {loading ? (
           <LoadingSkeleton />
         ) : filtered.length === 0 ? (
@@ -142,7 +136,6 @@ function TravelCard({ plan, onClick }: { plan: TravelPlan; onClick: () => void }
     onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)'; el.style.borderColor = '#D8D8D8'; el.style.transform = 'translateY(-2px)' }}
     onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)'; el.style.borderColor = '#EBEBEB'; el.style.transform = '' }}
     >
-      {/* 썸네일 */}
       <div style={{ width: 88, flexShrink: 0, position: 'relative', overflow: 'hidden', background: '#F5F5F5' }}>
         {img
           ? <img src={img} alt={plan.endLocation} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -150,8 +143,6 @@ function TravelCard({ plan, onClick }: { plan: TravelPlan; onClick: () => void }
         {img && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.2)' }}/>}
         <div style={{ position: 'absolute', bottom: 6, left: 0, right: 0, textAlign: 'center', fontSize: '1rem' }}>{emoji}</div>
       </div>
-
-      {/* 콘텐츠 */}
       <div style={{ flex: 1, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -160,26 +151,16 @@ function TravelCard({ plan, onClick }: { plan: TravelPlan; onClick: () => void }
             {plan.isAiGenerated && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FFF3F1', color: 'var(--primary)', flexShrink: 0 }}>✨ AI</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444', display: 'flex', alignItems: 'center', gap: 4 }}>
-              {plan.startLocation} → {plan.endLocation}
-            </span>
-            <span style={{ fontSize: '0.78rem', color: '#999' }}>
-              {formatDate(plan.startDate)} ~ {formatDate(plan.endDate)}
-            </span>
-            <span style={{ fontSize: '0.72rem', color: '#BBB', background: '#F5F5F5', padding: '2px 9px', borderRadius: 20 }}>
-              {nightCount(plan.startDate, plan.endDate)}
-            </span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444' }}>{plan.startLocation} → {plan.endLocation}</span>
+            <span style={{ fontSize: '0.78rem', color: '#999' }}>{formatDate(plan.startDate)} ~ {formatDate(plan.endDate)}</span>
+            <span style={{ fontSize: '0.72rem', color: '#BBB', background: '#F5F5F5', padding: '2px 9px', borderRadius: 20 }}>{nightCount(plan.startDate, plan.endDate)}</span>
           </div>
         </div>
-
-        {/* 비용 */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {(plan.totalEstimatedCost ?? 0) > 0 && (
             <>
               <div style={{ fontSize: '0.65rem', color: '#BBB', marginBottom: 2 }}>예상 비용</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--primary)' }}>
-                {(plan.totalEstimatedCost ?? 0).toLocaleString()}원
-              </div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--primary)' }}>{(plan.totalEstimatedCost ?? 0).toLocaleString()}원</div>
             </>
           )}
         </div>
@@ -214,38 +195,6 @@ function LoadingSkeleton() {
   )
 }
 
-<<<<<<< Updated upstream
-/* ── 선호도 슬라이더 컴포넌트 ── */
-const PREF_CATEGORIES = [
-  { key: 'food',          emoji: '🍜', label: '음식' },
-  { key: 'accommodation', emoji: '🏨', label: '숙박' },
-  { key: 'extreme',       emoji: '🎯', label: '익스트림' },
-  { key: 'transport',     emoji: '🚇', label: '이동' },
-] as const
-
-type PrefKey = typeof PREF_CATEGORIES[number]['key']
-type Prefs = Record<PrefKey, number>
-
-function PreferenceSliders({ prefs, onChange }: { prefs: Prefs; onChange: (p: Prefs) => void }) {
-  return (
-    <div style={{ background: '#F8F8FF', border: '1px solid #E0E0F0', borderRadius: 10, padding: '14px 16px' }}>
-      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#555', marginBottom: 12 }}>
-        🎛️ 여행 맞춤 선호도 <span style={{ fontWeight: 400, color: '#BBB' }}>(0~10)</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {PREF_CATEGORIES.map(({ key, emoji, label }) => (
-          <div key={key} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 28px', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444' }}>{emoji} {label}</span>
-            <input
-              type="range" min={0} max={10} step={1}
-              value={prefs[key]}
-              onChange={e => onChange({ ...prefs, [key]: Number(e.target.value) })}
-              style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
-            />
-            <span style={{
-              fontSize: '0.82rem', fontWeight: 800, textAlign: 'center',
-              color: prefs[key] >= 8 ? 'var(--primary)' : prefs[key] >= 5 ? '#0984E3' : '#999',
-=======
 /* ── 선호도 슬라이더 ── */
 type Prefs = { food: number; accommodation: number; extreme: number; transport: number }
 
@@ -259,7 +208,6 @@ function PreferenceSliders({ prefs, setPrefs }: {
     { key: 'extreme',       icon: '🎯', label: '익스트림' },
     { key: 'transport',     icon: '🚇', label: '이동' },
   ]
-
   return (
     <div style={{ background: '#F8F8F8', borderRadius: 10, padding: '14px', border: '1px solid #EBEBEB' }}>
       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#555', marginBottom: 12 }}>
@@ -279,17 +227,10 @@ function PreferenceSliders({ prefs, setPrefs }: {
             <span style={{
               fontSize: '0.82rem', fontWeight: 800, width: 28, textAlign: 'center', flexShrink: 0,
               color: prefs[key] >= 8 ? 'var(--primary)' : prefs[key] >= 5 ? '#0984E3' : '#888',
->>>>>>> Stashed changes
             }}>{prefs[key]}</span>
           </div>
         ))}
       </div>
-<<<<<<< Updated upstream
-      <div style={{ marginTop: 10, fontSize: '0.71rem', color: '#AAA', lineHeight: 1.5 }}>
-        점수가 높을수록 해당 항목에 더 많은 일정·예산을 배분합니다
-      </div>
-=======
->>>>>>> Stashed changes
     </div>
   )
 }
@@ -299,23 +240,13 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const saved = readSearch()
   const today = new Date().toISOString().split('T')[0]
 
-  const today = new Date().toISOString().split('T')[0]
-
   const [tab, setTab] = useState<'natural' | 'ai'>('natural')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
-<<<<<<< Updated upstream
-  const defaultPrefs: Prefs = { food: 5, accommodation: 5, extreme: 5, transport: 5 }
-  const [natPrefs, setNatPrefs] = useState<Prefs>(defaultPrefs)
-  const [aiPrefs,  setAiPrefs]  = useState<Prefs>(defaultPrefs)
-=======
-  // 선호도 점수 (0~10)
   const [natPrefs, setNatPrefs] = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
   const [aiPrefs, setAiPrefs]   = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
->>>>>>> Stashed changes
 
-  // 자유 입력
   const [nat, setNat] = useState({
     startLocation: saved.from || '인천국제공항',
     startDate:     saved.startDate || '',
@@ -324,7 +255,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     naturalInput:  saved.to ? `${saved.to}으로 여행 가고 싶어요. ` : '',
   })
 
-  // AI 상세
   const [ai, setAi] = useState({
     startLocation:       saved.from || '인천국제공항',
     endLocation:         saved.to   || '',
@@ -358,9 +288,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const res = await fetch('/api/v1/travels/ai/init/natural', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-<<<<<<< Updated upstream
-        body: JSON.stringify({ startLocation: nat.startLocation, startDate: nat.startDate, endDate: nat.endDate, memberCount: nat.memberCount, naturalInput: nat.naturalInput.trim(), foodScore: natPrefs.food, accommodationScore: natPrefs.accommodation, extremeScore: natPrefs.extreme, transportScore: natPrefs.transport }),
-=======
         body: JSON.stringify({
           startLocation: nat.startLocation,
           startDate: nat.startDate,
@@ -372,7 +299,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           extremeScore: natPrefs.extreme,
           transportScore: natPrefs.transport,
         }),
->>>>>>> Stashed changes
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
@@ -389,9 +315,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const res = await fetch('/api/v1/travels/ai/init', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-<<<<<<< Updated upstream
-        body: JSON.stringify({ ...ai, theme: ai.theme || null, budgetTotal: ai.budgetTotal ? Number(ai.budgetTotal) : null, departureFlightTime: ai.departureFlightTime || null, arrivalAtDestTime: ai.arrivalAtDestTime || null, returnFlightTime: ai.returnFlightTime || null, foodScore: aiPrefs.food, accommodationScore: aiPrefs.accommodation, extremeScore: aiPrefs.extreme, transportScore: aiPrefs.transport }),
-=======
         body: JSON.stringify({
           ...ai,
           theme: ai.theme || null,
@@ -404,7 +327,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           extremeScore: aiPrefs.extreme,
           transportScore: aiPrefs.transport,
         }),
->>>>>>> Stashed changes
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
@@ -418,13 +340,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background: '#fff', borderRadius: 20, padding: '32px 32px 28px', width: '100%', maxWidth: 520, boxShadow: '0 24px 64px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}>
 
-        {/* 헤더 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#1A1A1A' }}>새 여행 만들기</h2>
           <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
 
-        {/* 탭 */}
         <div style={{ display: 'flex', gap: 0, marginBottom: 24, border: '1px solid #E0E0E0', borderRadius: 10, overflow: 'hidden' }}>
           {([['natural', '💬 자유 입력'], ['ai', '✨ AI 상세 설정']] as const).map(([t, label], i) => (
             <button key={t} onClick={() => { setTab(t); setError('') }} style={{
@@ -455,28 +375,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               <AutocompleteInput value={nat.startLocation} onChange={v => setNat(f => ({...f, startLocation: v}))} options={DEPARTURE_OPTIONS} placeholder="인천국제공항" required />
             </div>
 
-            {/* 날짜 (과거 선택 불가 + 귀국일은 출발일 이후만) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
-<<<<<<< Updated upstream
-                <input type="date" value={nat.startDate} required min={today}
-                  onChange={e => setNat(f => ({...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? '' : f.endDate}))}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
-                <input type="date" value={nat.endDate} required min={nat.startDate || today}
-                  onChange={e => setNat(f => ({...f, endDate: e.target.value}))}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
-=======
                 <input
-                  type="date" value={nat.startDate} required
-                  min={today}
+                  type="date" value={nat.startDate} required min={today}
                   onChange={e => {
                     const d = e.target.value
                     setNat(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate }))
@@ -489,14 +392,12 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
                 <input
-                  type="date" value={nat.endDate} required
-                  min={nat.startDate || today}
+                  type="date" value={nat.endDate} required min={nat.startDate || today}
                   onChange={e => setNat(f => ({...f, endDate: e.target.value}))}
                   style={inputSt}
                   onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
                   onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
                 />
->>>>>>> Stashed changes
               </div>
             </div>
 
@@ -507,7 +408,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </select>
             </div>
 
-            {/* 선호도 슬라이더 */}
             <PreferenceSliders prefs={natPrefs} setPrefs={setNatPrefs} />
 
             <div>
@@ -525,8 +425,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               />
             </div>
 
-            <PreferenceSliders prefs={natPrefs} onChange={setNatPrefs} />
-
             <button type="submit" disabled={loading} style={{
               padding: '13px', borderRadius: 10, fontSize: '0.92rem', fontWeight: 800,
               background: loading ? '#E0E0E0' : 'var(--primary)', color: '#fff', border: 'none',
@@ -543,7 +441,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         {tab === 'ai' && (
           <form onSubmit={handleAiSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-            {/* 국가 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>여행 국가</label>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -558,13 +455,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </div>
             </div>
 
-            {/* 출발지 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발지</label>
               <AutocompleteInput value={ai.startLocation} onChange={v => setAi(f => ({...f, startLocation: v}))} options={DEPARTURE_OPTIONS} placeholder="인천국제공항..." required />
             </div>
 
-            {/* 여행지 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>여행지</label>
               <AutocompleteInput value={ai.endLocation} onChange={v => setAi(f => ({...f, endLocation: v}))}
@@ -572,28 +467,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 placeholder={ai.countryCode === 'JP' ? '도쿄, 오사카, 삿포로...' : '부산, 제주, 강릉...'} required />
             </div>
 
-            {/* 날짜 (과거 선택 불가 + 귀국일은 출발일 이후만) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
-<<<<<<< Updated upstream
-                <input type="date" value={ai.startDate} required min={today}
-                  onChange={e => setAi(f => ({...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? '' : f.endDate}))}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
-                <input type="date" value={ai.endDate} required min={ai.startDate || today}
-                  onChange={e => setAi(f => ({...f, endDate: e.target.value}))}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
-=======
                 <input
-                  type="date" value={ai.startDate} required
-                  min={today}
+                  type="date" value={ai.startDate} required min={today}
                   onChange={e => {
                     const d = e.target.value
                     setAi(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate }))
@@ -606,18 +484,15 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
                 <input
-                  type="date" value={ai.endDate} required
-                  min={ai.startDate || today}
+                  type="date" value={ai.endDate} required min={ai.startDate || today}
                   onChange={e => setAi(f => ({...f, endDate: e.target.value}))}
                   style={inputSt}
                   onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
                   onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
                 />
->>>>>>> Stashed changes
               </div>
             </div>
 
-            {/* 인원 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>인원 수</label>
               <select value={ai.memberCount} onChange={e => setAi(f => ({...f, memberCount: Number(e.target.value)}))} style={{ ...inputSt, cursor: 'pointer' }}>
@@ -625,7 +500,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </select>
             </div>
 
-            {/* 여행 스타일 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>여행 스타일</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
@@ -644,7 +518,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </div>
             </div>
 
-            {/* 렌트카 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>이동 수단</label>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -659,10 +532,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </div>
             </div>
 
-            {/* 선호도 슬라이더 */}
             <PreferenceSliders prefs={aiPrefs} setPrefs={setAiPrefs} />
 
-            {/* 키워드 */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>키워드 <span style={{ fontWeight: 400, color: '#BBB' }}>(Enter로 추가)</span></label>
               {ai.keywords.length > 0 && (
@@ -683,8 +554,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
             </div>
 
-            {/* 항공편 시간 */}
-            <div style={{ background: '#F8F8F8', borderRadius: 10, padding: '14px 14px', border: '1px solid #EBEBEB' }}>
+            <div style={{ background: '#F8F8F8', borderRadius: 10, padding: '14px', border: '1px solid #EBEBEB' }}>
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#555', marginBottom: 10 }}>✈️ 항공편 시간 <span style={{ fontWeight: 400, color: '#BBB' }}>(선택)</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 {[['출국 출발','departureFlightTime'],['현지 도착','arrivalAtDestTime'],['귀국 출발','returnFlightTime']].map(([label, key]) => (
@@ -698,8 +568,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 ))}
               </div>
             </div>
-
-            <PreferenceSliders prefs={aiPrefs} onChange={setAiPrefs} />
 
             <button type="submit" disabled={loading} style={{
               padding: '13px', borderRadius: 10, fontSize: '0.92rem', fontWeight: 800,

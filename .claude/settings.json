@@ -6,8 +6,8 @@
           {
             "type": "command",
             "timeout": 60,
-            "statusMessage": "변경사항 커밋 & 푸시 중...",
-            "command": "cd \"/Users/jang-gunho/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Spring/dagalle\" && if ! git diff --quiet || ! git diff --staged --quiet || [ -n \"$(git ls-files --others --exclude-standard)\" ]; then git add -A && MSG=$(git diff --staged --name-only | head -5 | tr '\\n' ', ' | sed 's/,$//') && git commit -m \"auto: ${MSG}\" && git push origin HEAD 2>&1; fi"
+            "statusMessage": "변경사항 자동 커밋 & 푸시 중...",
+            "command": "bash \"/Users/jang-gunho/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Spring/dagalle/.claude/auto-commit.sh\" 2>&1 || true"
           }
         ]
       }

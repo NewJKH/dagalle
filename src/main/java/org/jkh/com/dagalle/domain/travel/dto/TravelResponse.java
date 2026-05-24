@@ -21,8 +21,15 @@ public class TravelResponse {
     private String countryCode;
     private Integer memberCount;
     private Integer budgetTotal;
+    private String theme;
+    private String keywords;
+    private boolean withCar;
+    private String departureFlightTime;
+    private String returnFlightTime;
+    private int totalDays;
 
     public static TravelResponse from(TravelPlan plan) {
+        int days = (int) plan.getStartDate().until(plan.getEndDate()).getDays() + 1;
         return TravelResponse.builder()
                 .id(plan.getId())
                 .title(plan.getTitle())
@@ -35,6 +42,12 @@ public class TravelResponse {
                 .countryCode(plan.getCountryCode())
                 .memberCount(plan.getMemberCount())
                 .budgetTotal(plan.getBudgetTotal())
+                .theme(plan.getTheme())
+                .keywords(plan.getKeywords())
+                .withCar(plan.isWithCar())
+                .departureFlightTime(plan.getDepartureFlightTime())
+                .returnFlightTime(plan.getReturnFlightTime())
+                .totalDays(days)
                 .build();
     }
 }

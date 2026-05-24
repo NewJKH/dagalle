@@ -48,10 +48,14 @@ public class PlanRoute {
     @Column(name = "distance_km")
     private Double distanceKm;
 
+    /** 이동수단 상세 (예: "후쿠오카공항→벳푸 고속버스 2시간, 산큐패스 3,250엔") */
+    @Column(columnDefinition = "TEXT")
+    private String note;
+
     @Builder
     public PlanRoute(PlanDay planDay, Integer sequence, Location fromLocation, Location toLocation,
                      TransportType transport, LocalDateTime departureTime,
-                     Integer durationMinutes, Integer estimatedCost, Double distanceKm) {
+                     Integer durationMinutes, Integer estimatedCost, Double distanceKm, String note) {
         this.planDay = planDay;
         this.sequence = sequence;
         this.fromLocation = fromLocation;
@@ -61,6 +65,7 @@ public class PlanRoute {
         this.durationMinutes = durationMinutes;
         this.estimatedCost = estimatedCost;
         this.distanceKm = distanceKm;
+        this.note = note;
     }
 
     public void update(TransportType transport, LocalDateTime departureTime,

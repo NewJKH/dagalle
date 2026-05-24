@@ -2,9 +2,11 @@ package org.jkh.com.dagalle.domain.ai.client;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -19,7 +21,7 @@ public class ClaudeApiClient {
 
     private static final String CLAUDE_API_URL = "https://api.anthropic.com";
     private static final String ANTHROPIC_VERSION = "2023-06-01";
-    private static final int MAX_TOKENS = 8192;
+    private static final int MAX_TOKENS = 16000;
 
     private final RestClient restClient;
     private final String apiKey;
@@ -31,9 +33,15 @@ public class ClaudeApiClient {
     ) {
         this.apiKey = apiKey;
         this.model = model;
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(15));
+        factory.setReadTimeout(Duration.ofSeconds(120));   // Claude 응답 최대 2분 대기
+
         this.restClient = RestClient.builder()
                 .baseUrl(CLAUDE_API_URL)
                 .defaultHeader("anthropic-version", ANTHROPIC_VERSION)
+                .requestFactory(factory)
                 .build();
     }
 

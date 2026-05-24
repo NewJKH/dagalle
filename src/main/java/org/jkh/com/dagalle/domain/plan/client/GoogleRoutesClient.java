@@ -42,7 +42,7 @@ public class GoogleRoutesClient {
      * 두 좌표 간 이동 정보를 반환합니다.
      *
      * @param fromLat       출발지 위도
-     * @param fromLng       출발지 경도
+     * @param fromLng       출발지 경도v
      * @param toLat         도착지 위도
      * @param toLng         도착지 경도
      * @param transport     이동수단

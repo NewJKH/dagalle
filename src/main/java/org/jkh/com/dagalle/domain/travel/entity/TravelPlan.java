@@ -51,13 +51,33 @@ public class TravelPlan {
 
     private Integer budgetTotal;
 
+    @Column(length = 100)
+    private String theme;
+
+    @Column(length = 500)
+    private String keywords;           // 쉼표 구분
+
+    @Column(name = "with_car")
+    private boolean withCar;
+
+    @Column(name = "departure_flight_time", length = 5)  // "HH:mm"
+    private String departureFlightTime;
+
+    @Column(name = "arrival_at_dest_time", length = 5)   // 현지 도착 시각
+    private String arrivalAtDestTime;
+
+    @Column(name = "return_flight_time", length = 5)
+    private String returnFlightTime;
+
     @OneToMany(mappedBy = "travelPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TravelMember> members = new ArrayList<>();
 
     @Builder
     public TravelPlan(User owner, String title, String startLocation, String endLocation,
                       LocalDate startDate, LocalDate endDate,
-                      String countryCode, Integer memberCount, Integer budgetTotal) {
+                      String countryCode, Integer memberCount, Integer budgetTotal,
+                      String theme, String keywords, boolean withCar,
+                      String departureFlightTime, String arrivalAtDestTime, String returnFlightTime) {
         this.owner = owner;
         this.title = title;
         this.startLocation = startLocation;
@@ -69,6 +89,12 @@ public class TravelPlan {
         this.countryCode = countryCode;
         this.memberCount = memberCount;
         this.budgetTotal = budgetTotal;
+        this.theme = theme;
+        this.keywords = keywords;
+        this.withCar = withCar;
+        this.departureFlightTime = departureFlightTime;
+        this.arrivalAtDestTime = arrivalAtDestTime;
+        this.returnFlightTime = returnFlightTime;
     }
 
     public void update(String title, String startLocation, String endLocation,

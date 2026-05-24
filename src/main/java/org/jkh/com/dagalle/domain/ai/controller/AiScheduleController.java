@@ -9,7 +9,9 @@ import org.jkh.com.dagalle.common.response.ApiResponse;
 import org.jkh.com.dagalle.common.security.UserPrincipal;
 import org.jkh.com.dagalle.domain.ai.dto.AiFillRequest;
 import org.jkh.com.dagalle.domain.ai.dto.AiGenerateRequest;
+import org.jkh.com.dagalle.domain.ai.dto.AiNaturalRequest;
 import org.jkh.com.dagalle.domain.ai.service.AiScheduleService;
+import org.jkh.com.dagalle.domain.plan.dto.PlanDayResponse;
 import org.jkh.com.dagalle.domain.travel.dto.TravelResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,13 +28,39 @@ public class AiScheduleController {
 
     private final AiScheduleService aiScheduleService;
 
-    @Operation(summary = "AI 일정 자동 생성",
-            description = """
-                    Claude AI에게 출발지·여행지·날짜·성향을 전달해 전체 여행 일정을 자동 생성합니다.
-                    - 응답 시간: 약 20~40초 (Claude API 호출)
-                    - 생성된 TravelPlan + PlanDay + PlanRoute + Location이 DB에 저장됩니다.
-                    - tendency: RELAX / BALANCED / ACTIVE
-                    """)
+    @Operation(summary = "AI 일정 초기화 (스켈레톤)",
+            description = "TravelPlan + 렌트카 + 숙박만 생성. Day는 생성하지 않음. 이후 /ai/day/{N} 으로 Day별 생성.")
+    @PostMapping("/ai/init")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<TravelResponse> init(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody AiGenerateRequest request) {
+        return ApiResponse.ok(aiScheduleService.initSchedule(principal.getId(), request));
+    }
+
+    @Operation(summary = "AI Day 단건 생성 (또는 재생성)",
+            description = "특정 Day의 일정을 Claude AI로 생성. 기존 Day가 있으면 삭제 후 재생성.")
+    @PostMapping("/{travelId}/ai/day/{dayNumber}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<PlanDayResponse> generateDay(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long travelId,
+            @PathVariable Integer dayNumber) {
+        return ApiResponse.ok(aiScheduleService.generateDay(principal.getId(), travelId, dayNumber));
+    }
+
+    @Operation(summary = "자유 입력으로 AI 일정 생성",
+            description = "날짜 + 100~300자 자유 텍스트 → AI가 여행지·교통·테마 등 모두 추론하여 TravelPlan 생성.")
+    @PostMapping("/ai/init/natural")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<TravelResponse> initNatural(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody AiNaturalRequest request) {
+        return ApiResponse.ok(aiScheduleService.initFromNaturalInput(principal.getId(), request));
+    }
+
+    @Operation(summary = "AI 일정 전체 생성 (레거시)",
+            description = "전체 일정을 한 번에 생성. Day별 승인이 필요 없는 경우 사용.")
     @PostMapping("/ai/generate")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<TravelResponse> generate(

@@ -49,10 +49,14 @@ public class Location {
     @Column(name = "cached_at")
     private LocalDateTime cachedAt;
 
+    /** 장소 상세 설명 (레스토랑: 대표메뉴·가격대·특징, 관광지: 주요 볼거리 등 AI 생성) */
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
     @Builder
     public Location(String name, String address, Double lat, Double lng,
                     Double rating, Integer reviewCount, LocationType type,
-                    LocationSource source, String externalId) {
+                    LocationSource source, String externalId, String description) {
         this.name = name;
         this.address = address;
         this.lat = lat;
@@ -62,6 +66,7 @@ public class Location {
         this.type = type;
         this.source = source;
         this.externalId = externalId;
+        this.description = description;
         this.cachedAt = LocalDateTime.now();
     }
 

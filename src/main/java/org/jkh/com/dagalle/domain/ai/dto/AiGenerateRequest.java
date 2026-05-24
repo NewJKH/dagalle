@@ -49,4 +49,9 @@ public class AiGenerateRequest {
 
     /** 귀국 출발 시간 (예: "15:00") — 마지막 Day 종료 기준 */
     private String returnFlightTime;
+
+    private int foodScore = 5;
+    private int accommodationScore = 5;
+    private int extremeScore = 3;
+    private int transportScore = 5;
 }

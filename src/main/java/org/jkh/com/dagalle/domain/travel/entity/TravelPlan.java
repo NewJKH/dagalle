@@ -69,6 +69,18 @@ public class TravelPlan {
     @Column(name = "return_flight_time", length = 5)
     private String returnFlightTime;
 
+    @Column(name = "food_score", nullable = false)
+    private int foodScore = 5;
+
+    @Column(name = "accommodation_score", nullable = false)
+    private int accommodationScore = 5;
+
+    @Column(name = "extreme_score", nullable = false)
+    private int extremeScore = 3;
+
+    @Column(name = "transport_score", nullable = false)
+    private int transportScore = 5;
+
     @OneToMany(mappedBy = "travelPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TravelMember> members = new ArrayList<>();
 
@@ -77,7 +89,8 @@ public class TravelPlan {
                       LocalDate startDate, LocalDate endDate,
                       String countryCode, Integer memberCount, Integer budgetTotal,
                       String theme, String keywords, boolean withCar,
-                      String departureFlightTime, String arrivalAtDestTime, String returnFlightTime) {
+                      String departureFlightTime, String arrivalAtDestTime, String returnFlightTime,
+                      int foodScore, int accommodationScore, int extremeScore, int transportScore) {
         this.owner = owner;
         this.title = title;
         this.startLocation = startLocation;
@@ -95,6 +108,10 @@ public class TravelPlan {
         this.departureFlightTime = departureFlightTime;
         this.arrivalAtDestTime = arrivalAtDestTime;
         this.returnFlightTime = returnFlightTime;
+        this.foodScore = foodScore;
+        this.accommodationScore = accommodationScore;
+        this.extremeScore = extremeScore;
+        this.transportScore = transportScore;
     }
 
     public void update(String title, String startLocation, String endLocation,

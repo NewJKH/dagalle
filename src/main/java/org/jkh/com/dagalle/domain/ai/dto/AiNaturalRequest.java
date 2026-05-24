@@ -31,4 +31,9 @@ public class AiNaturalRequest {
     private String naturalInput;
 
     private int memberCount = 2;
+
+    private int foodScore = 5;
+    private int accommodationScore = 5;
+    private int extremeScore = 3;
+    private int transportScore = 5;
 }

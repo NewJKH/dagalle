@@ -111,6 +111,10 @@ public class AiScheduleService {
                 .departureFlightTime(req.getDepartureFlightTime())
                 .arrivalAtDestTime(req.getArrivalAtDestTime())
                 .returnFlightTime(req.getReturnFlightTime())
+                .foodScore(req.getFoodScore())
+                .accommodationScore(req.getAccommodationScore())
+                .extremeScore(req.getExtremeScore())
+                .transportScore(req.getTransportScore())
                 .build();
         travel.markAiGenerated();
         travelPlanRepository.save(travel);
@@ -221,6 +225,10 @@ public class AiScheduleService {
         structuredReq.setDepartureFlightTime(depTime);
         structuredReq.setArrivalAtDestTime(arrTime);
         structuredReq.setReturnFlightTime(retTime);
+        structuredReq.setFoodScore(req.getFoodScore());
+        structuredReq.setAccommodationScore(req.getAccommodationScore());
+        structuredReq.setExtremeScore(req.getExtremeScore());
+        structuredReq.setTransportScore(req.getTransportScore());
 
         log.info("[AI natural → 구조화] 여행지={}, 렌트카={}, 테마={}, 키워드={}",
                 endLocation, withCar, theme, keywords);
@@ -421,9 +429,13 @@ public class AiScheduleService {
                 ? "렌트카(장거리 CAR, 근거리·관광지 내 이동은 WALK 필수)"
                 : "대중교통(SUBWAY/BUS/TRAIN, 도보 가능 거리는 WALK)";
 
+        String prefHint = buildPrefHint(travel.getFoodScore(), travel.getAccommodationScore(),
+                travel.getExtremeScore(), travel.getTransportScore());
+
         return String.format(
                 "여행지:%s | %d일차/%d일 | 날짜:%s | 인원:%d명 | 이동:%s | 테마:%s | 키워드:%s\n" +
                 "이전날 마지막 위치:%s | 숙소:%s | %s\n" +
+                "【선호도】%s\n" +
                 "%d일차 하루 동선만 JSON으로. routes만 포함, 4~6개.",
                 travel.getEndLocation(), dayNum, totalDays, date,
                 travel.getMemberCount() != null ? travel.getMemberCount() : 2,
@@ -432,7 +444,23 @@ public class AiScheduleService {
                 prevLocation.isEmpty() ? "미정" : prevLocation,
                 accommodationHint.isEmpty() ? "미정" : accommodationHint,
                 flightHint,
+                prefHint,
                 dayNum);
+    }
+
+    private String buildPrefHint(int food, int accommodation, int extreme, int transport) {
+        List<String> hints = new ArrayList<>();
+        if (food >= 8)             hints.add("음식/맛집 최우선(현지 유명 레스토랑·로컬 맛집 2곳 이상 필수)");
+        else if (food >= 6)        hints.add("음식 중시(현지 맛집 1~2곳 포함)");
+        else if (food <= 2)        hints.add("음식 무관심(식사는 간단히)");
+        if (accommodation >= 8)   hints.add("숙소 품질 최우선(료칸·고급 호텔 추천)");
+        else if (accommodation <= 2) hints.add("숙소 저예산 선호");
+        if (extreme >= 8)          hints.add("액티비티/익스트림 최우선(래프팅·스키·하이킹 등 체험 필수)");
+        else if (extreme >= 6)     hints.add("액티비티 포함 권장");
+        else if (extreme <= 2)     hints.add("액티비티 불필요(관광·식사 위주)");
+        if (transport >= 8)        hints.add("이동 자체를 즐김(기차여행·드라이브 코스 추천)");
+        else if (transport <= 2)   hints.add("이동 최소화(근거리 중심 동선)");
+        return hints.isEmpty() ? "균형(특별한 선호 없음)" : String.join(", ", hints);
     }
 
     private String buildFlightHint(TravelPlan travel, int dayNum, int totalDays) {

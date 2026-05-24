@@ -264,7 +264,9 @@ public class AiScheduleService {
         String flightHint = buildFlightHint(travel, dayNumber, totalDays);
 
         String dayRaw = claudeApiClient.chat(
-                buildDaySystemPrompt(travel.getCountryCode()),
+                buildDaySystemPrompt(travel.getCountryCode(),
+                        travel.getFoodScore(), travel.getAccommodationScore(),
+                        travel.getExtremeScore(), travel.getTransportScore()),
                 buildDayUserMessage(travel, dayNumber, totalDays, date,
                         prevLastLocation, accommodationHint.trim(), flightHint));
         log.debug("[AI day{} 응답] {}", dayNumber, dayRaw);
@@ -373,16 +375,37 @@ public class AiScheduleService {
     }
 
     private String buildSkeletonUserMessage(AiGenerateRequest req, int totalDays) {
+        // 숙박 점수 → 구체적 등급 지시 (스켈레톤에서 숙소 선정 시 반드시 준수)
+        int accScore = req.getAccommodationScore();
+        String accConstraint;
+        if ("JP".equalsIgnoreCase(req.getCountryCode())) {
+            if (accScore >= 9)      accConstraint = "최고급 료칸·5성급 호텔 필수(1박 30,000엔 이상)";
+            else if (accScore >= 7) accConstraint = "고급 호텔·부티크 료칸(1박 15,000~30,000엔)";
+            else if (accScore >= 4) accConstraint = "일반 비즈니스 호텔(1박 8,000~15,000엔)";
+            else if (accScore >= 2) accConstraint = "저가 비즈니스 호텔·게스트하우스(1박 4,000~8,000엔)";
+            else                    accConstraint = "최저가 캡슐호텔·도미토리(1박 2,000~4,000엔)";
+        } else {
+            if (accScore >= 9)      accConstraint = "최고급 호텔·리조트(1박 30만원 이상)";
+            else if (accScore >= 7) accConstraint = "고급 호텔(1박 15~30만원)";
+            else if (accScore >= 4) accConstraint = "일반 호텔(1박 8~15만원)";
+            else if (accScore >= 2) accConstraint = "모텔·게스트하우스(1박 4~8만원)";
+            else                    accConstraint = "최저가 게스트하우스·도미토리(1박 2~4만원)";
+        }
         return String.format(
-                "여행지:%s(%s) 기간:%s~%s(%d일) 인원:%d명 테마:%s 이동:%s 예산:%s\n제목·렌트카·숙박만 JSON으로. 일정 포함 금지.",
+                "여행지:%s(%s) 기간:%s~%s(%d일) 인원:%d명 테마:%s 이동:%s 예산:%s\n" +
+                "【숙박 등급 강제】숙박점수=%d/10 → %s. 이 등급 외 숙소 추천 절대 금지.\n" +
+                "제목·렌트카·숙박만 JSON으로. 일정 포함 금지.",
                 req.getEndLocation(), req.getCountryCode(),
                 req.getStartDate(), req.getEndDate(), totalDays, req.getMemberCount(),
                 req.getTheme() != null ? req.getTheme() : "일반관광",
                 req.isWithCar() ? "렌트카" : "대중교통",
-                req.getBudgetTotal() != null ? req.getBudgetTotal() + "원" : "제한없음");
+                req.getBudgetTotal() != null ? req.getBudgetTotal() + "원" : "제한없음",
+                accScore, accConstraint);
     }
 
-    private String buildDaySystemPrompt(String countryCode) {
+    private String buildDaySystemPrompt(String countryCode,
+                                        int foodScore, int accommodationScore,
+                                        int extremeScore, int transportScore) {
         String base = "반드시 JSON만 응답. 마크다운·코드블록 금지.\n스키마: " + DAY_SCHEMA.strip();
 
         String transportRules =
@@ -397,27 +420,103 @@ public class AiScheduleService {
 
         String descriptionRules =
                 "\n\n【장소 description 작성 규칙 - 반드시 포함】\n" +
-                "• RESTAURANT/CAFE: '대표메뉴명(가격대), 특징, 추천포인트' 형식으로 2~3문장. 예: '명물 삿포로 미소라멘(1,200엔~). 진한 돼지뼈 육수에 버터 토핑이 특징. 개점 전부터 줄이 생기는 현지 인기 맛집.'\n" +
+                "• RESTAURANT/CAFE: '대표메뉴명(가격대), 특징, 추천포인트' 형식으로 2~3문장.\n" +
                 "• MUSEUM/PARK/SHOPPING: 주요 볼거리·체험 내용·입장료 포함 1~2문장.\n" +
                 "• HOTEL/STATION/AIRPORT: 간단한 특징 또는 빈 문자열 가능.\n" +
                 "• description은 절대 null이나 빈 문자열로 두지 말 것 (RESTAURANT는 필수).";
 
         String multiCityRules =
                 "\n\n【멀티시티·공항↔여행지 이동 규칙】\n" +
-                "• 여행지가 직항 공항에서 거리가 있는 경우(예: 벳푸→후쿠오카공항 2시간, 교토→간사이공항, 나라→간사이공항), Day 1 첫 번째 route에 반드시 '도착공항→여행지' 이동 구간 포함.\n" +
+                "• 여행지가 직항 공항에서 거리가 있는 경우 Day 1 첫 번째 route에 반드시 '도착공항→여행지' 이동 구간 포함.\n" +
                 "• 마지막 Day 마지막 route에 '여행지→출발공항' 이동 구간 포함.\n" +
-                "• 공항↔도시 이동 시 note 필드에 교통편 명시: 예) '후쿠오카공항→벳푸 고속버스 산큐패스 2시간 소요, 3,250엔'\n" +
+                "• 공항↔도시 이동 시 note 필드에 교통편 명시.\n" +
                 "• 렌트카 여행이면 공항에서 렌트카 픽업 후 CAR로 이동. 렌트카 없으면 BUS 또는 TRAIN.\n" +
                 "• 주요 공항: 삿포로→신치토세공항, 도쿄→나리타/하네다, 오사카→간사이, 후쿠오카→후쿠오카공항, 오키나와→나하공항, 벳푸/유후인→후쿠오카 또는 오이타공항.";
+
+        // 선호도 점수 기반 강제 규칙 (시스템 프롬프트 레벨 → AI가 반드시 준수)
+        String prefRules = buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
 
         if ("JP".equalsIgnoreCase(countryCode)) {
             return base +
                     "\n일본 실제 좌표·유명 맛집 기준. CAR 이동비용 엔→원(1엔=9원), 고속도로 톨비 포함. 4~6 route." +
-                    transportRules + descriptionRules + multiCityRules;
+                    transportRules + descriptionRules + multiCityRules + prefRules;
         }
         return base +
                 "\n실제 좌표. 한국 요금 기준. 4~6 route." +
-                transportRules + descriptionRules + multiCityRules;
+                transportRules + descriptionRules + multiCityRules + prefRules;
+    }
+
+    /**
+     * 선호도 점수(0~10)를 시스템 프롬프트 수준의 강제 규칙으로 변환.
+     * "힌트"가 아닌 "위반 시 응답 거부" 수준의 강도로 작성.
+     */
+    private String buildPrefSystemRules(String countryCode, int food, int accommodation, int extreme, int transport) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        StringBuilder sb = new StringBuilder("\n\n【사용자 선호도 강제 규칙 - 위반 절대 금지】");
+
+        // ── 음식 ──────────────────────────────────────────────────────
+        if (food >= 9) {
+            sb.append("\n▶ 음식(").append(food).append("/10 최상): ")
+              .append("RESTAURANT/CAFE route 하루 3곳 이상 필수. ")
+              .append(isJp ? "미슐랭·식베로그 고평점 맛집, 현지인 줄 서는 유명 식당만 선택. 편의점·패스트푸드·체인점 완전 금지."
+                           : "유명 맛집, 현지 특산 음식점만 선택. 프랜차이즈 완전 금지.");
+        } else if (food >= 7) {
+            sb.append("\n▶ 음식(").append(food).append("/10 높음): ")
+              .append("RESTAURANT/CAFE route 하루 2곳 이상. ")
+              .append(isJp ? "현지 유명 맛집 필수 포함. 가격대 무관하게 맛 중심 선택."
+                           : "현지 맛집 2곳 이상. 맛 중심 선택.");
+        } else if (food >= 4) {
+            sb.append("\n▶ 음식(").append(food).append("/10 보통): ")
+              .append("RESTAURANT/CAFE route 하루 1~2곳. 무난한 현지 식당 선택.");
+        } else if (food >= 2) {
+            sb.append("\n▶ 음식(").append(food).append("/10 낮음): ")
+              .append("식사는 최소화. RESTAURANT route 하루 최대 1곳. ")
+              .append(isJp ? "저렴한 정식집·라멘집·편의점 수준 OK."
+                           : "저렴한 식당 또는 편의점 수준 OK.");
+        } else {
+            sb.append("\n▶ 음식(").append(food).append("/10 최하): ")
+              .append("RESTAURANT/CAFE type route 생성 금지. 식사는 이동 중 편의점으로 해결하는 것으로 가정. ")
+              .append("식당 방문 일정 포함 절대 금지.");
+        }
+
+        // ── 숙박 (Day 동선에 hotel 관련 이동이 생기는 경우) ──────────
+        if (accommodation >= 8) {
+            sb.append("\n▶ 숙박(").append(accommodation).append("/10 높음): ")
+              .append(isJp ? "숙소 이동 route에 료칸·5성급 호텔만 언급. 비즈니스 호텔·게스트하우스 언급 금지."
+                           : "숙소 이동 route에 고급 리조트·5성급 호텔만 언급.");
+        } else if (accommodation <= 2) {
+            sb.append("\n▶ 숙박(").append(accommodation).append("/10 낮음): ")
+              .append(isJp ? "숙소 이동 route에 게스트하우스·캡슐호텔·저가 비즈니스 호텔만 언급. 고급 호텔·료칸 언급 금지."
+                           : "숙소 이동 route에 게스트하우스·모텔·저가 호텔만 언급. 고급 호텔 언급 금지.");
+        }
+
+        // ── 익스트림/액티비티 ─────────────────────────────────────────
+        if (extreme >= 8) {
+            sb.append("\n▶ 액티비티(").append(extreme).append("/10 높음): ")
+              .append("하이킹·래프팅·스카이다이빙·스키·서핑·ATV 등 체험형 액티비티 route 1개 이상 필수. ")
+              .append("미술관·박물관만 있는 일정은 불가.");
+        } else if (extreme >= 5) {
+            sb.append("\n▶ 액티비티(").append(extreme).append("/10 보통): ")
+              .append("가벼운 체험(온천 체험·쿠킹클래스·자전거 투어 등) 1개 포함 권장.");
+        } else if (extreme <= 2) {
+            sb.append("\n▶ 액티비티(").append(extreme).append("/10 낮음): ")
+              .append("스포츠·어드벤처·체험형 액티비티 route 생성 금지. ")
+              .append("관광지·미술관·카페·쇼핑·공원 위주 편안한 일정만 구성.");
+        }
+
+        // ── 이동/교통 ────────────────────────────────────────────────
+        if (transport >= 8) {
+            sb.append("\n▶ 이동(").append(transport).append("/10 높음): ")
+              .append(isJp ? "신칸센·특급열차·야간버스·페리 등 이동 자체가 볼거리인 route 포함 권장. 이동 시간이 길어도 OK."
+                           : "KTX·관광열차·해상 페리 등 경치 좋은 이동 route 포함 권장.");
+        } else if (transport <= 2) {
+            sb.append("\n▶ 이동(").append(transport).append("/10 낮음): ")
+              .append("이동 최소화 필수. 하루 총 이동시간 합계 90분 이하 목표. ")
+              .append("한 구역(반경 2km) 내에서 여러 장소를 도보로 이동하는 동선으로 구성. ")
+              .append("먼 거리 이동 route 생성 금지.");
+        }
+
+        return sb.toString();
     }
 
     private String buildDayUserMessage(TravelPlan travel, int dayNum, int totalDays,
@@ -429,13 +528,10 @@ public class AiScheduleService {
                 ? "렌트카(장거리 CAR, 근거리·관광지 내 이동은 WALK 필수)"
                 : "대중교통(SUBWAY/BUS/TRAIN, 도보 가능 거리는 WALK)";
 
-        String prefHint = buildPrefHint(travel.getFoodScore(), travel.getAccommodationScore(),
-                travel.getExtremeScore(), travel.getTransportScore());
-
         return String.format(
                 "여행지:%s | %d일차/%d일 | 날짜:%s | 인원:%d명 | 이동:%s | 테마:%s | 키워드:%s\n" +
                 "이전날 마지막 위치:%s | 숙소:%s | %s\n" +
-                "【선호도】%s\n" +
+                "선호도점수(시스템규칙참조) 음식:%d 숙박:%d 익스트림:%d 이동:%d\n" +
                 "%d일차 하루 동선만 JSON으로. routes만 포함, 4~6개.",
                 travel.getEndLocation(), dayNum, totalDays, date,
                 travel.getMemberCount() != null ? travel.getMemberCount() : 2,
@@ -444,23 +540,9 @@ public class AiScheduleService {
                 prevLocation.isEmpty() ? "미정" : prevLocation,
                 accommodationHint.isEmpty() ? "미정" : accommodationHint,
                 flightHint,
-                prefHint,
+                travel.getFoodScore(), travel.getAccommodationScore(),
+                travel.getExtremeScore(), travel.getTransportScore(),
                 dayNum);
-    }
-
-    private String buildPrefHint(int food, int accommodation, int extreme, int transport) {
-        List<String> hints = new ArrayList<>();
-        if (food >= 8)             hints.add("음식/맛집 최우선(현지 유명 레스토랑·로컬 맛집 2곳 이상 필수)");
-        else if (food >= 6)        hints.add("음식 중시(현지 맛집 1~2곳 포함)");
-        else if (food <= 2)        hints.add("음식 무관심(식사는 간단히)");
-        if (accommodation >= 8)   hints.add("숙소 품질 최우선(료칸·고급 호텔 추천)");
-        else if (accommodation <= 2) hints.add("숙소 저예산 선호");
-        if (extreme >= 8)          hints.add("액티비티/익스트림 최우선(래프팅·스키·하이킹 등 체험 필수)");
-        else if (extreme >= 6)     hints.add("액티비티 포함 권장");
-        else if (extreme <= 2)     hints.add("액티비티 불필요(관광·식사 위주)");
-        if (transport >= 8)        hints.add("이동 자체를 즐김(기차여행·드라이브 코스 추천)");
-        else if (transport <= 2)   hints.add("이동 최소화(근거리 중심 동선)");
-        return hints.isEmpty() ? "균형(특별한 선호 없음)" : String.join(", ", hints);
     }
 
     private String buildFlightHint(TravelPlan travel, int dayNum, int totalDays) {

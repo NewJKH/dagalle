@@ -198,7 +198,7 @@ export default function TravelPlannerPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', flex: 1, paddingTop: 64, height: 'calc(100vh - 64px)' }}>
 
         {/* ── 사이드바 ─────────────────────────────── */}
-        <aside style={{ background: '#fff', borderRight: '1px solid var(--border-lt)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <aside style={{ background: '#fff', borderRight: '1px solid var(--border-lt)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* 여행 헤더 */}
           <div style={{ background: 'linear-gradient(135deg, #0284C7, #38BDF8)', padding: '20px 20px 24px' }}>
@@ -227,8 +227,73 @@ export default function TravelPlannerPage() {
             )}
           </div>
 
+          {/* ── 요약 패널 (상단) ── */}
+          <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border-lt)', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', maxHeight: 300, overflowY: 'auto' }}>
+
+            {allDone && (
+              <div style={{ padding: '8px 10px', background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 10, border: '1px solid #A7F3D0' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#059669', marginBottom: 2 }}>✅ 전체 일정 완성!</div>
+                <div style={{ fontSize: '0.67rem', color: '#6B7280' }}>마음에 안 드는 Day는 🔄로 재생성 가능해요.</div>
+              </div>
+            )}
+
+            <div style={{ background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', borderRadius: 12, padding: '10px 12px', border: '1px solid #BFDBFE' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <div style={{ fontSize: '0.67rem', color: 'var(--sky-dk)', fontWeight: 600 }}>예상 총 비용</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--sky-dk)' }}>
+                  {(costSummary?.totalKrw ?? totalCost).toLocaleString()}<span style={{ fontSize: '0.72rem', marginLeft: 2 }}>원</span>
+                </div>
+              </div>
+              {costSummary && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {([['교통', costSummary.breakdown.transport], ['연료', costSummary.breakdown.fuel], ['숙박', costSummary.breakdown.accommodation], ['렌트카', costSummary.breakdown.rental], ['식사', costSummary.breakdown.food], ['기타', costSummary.breakdown.etc]] as [string, number][])
+                    .filter(([, v]) => v > 0)
+                    .map(([label, val]) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem' }}>
+                        <span style={{ color: 'var(--text3)' }}>{label}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--sky-dk)' }}>{val.toLocaleString()}원</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {carRental && (
+              <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 10, padding: '8px 12px', border: '1px solid #A7F3D0' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#059669', marginBottom: 3 }}>🚗 렌트카</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{carRental.carType}</div>
+                    <div style={{ fontSize: '0.63rem', color: 'var(--text3)' }}>{carRental.dailyRateKrw?.toLocaleString()}원/일 × {carRental.rentalDays}일</div>
+                  </div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669' }}>
+                    {((carRental.dailyRateKrw ?? 0) * (carRental.rentalDays ?? 0) + (carRental.estimatedFuelKrw ?? 0) + (carRental.estimatedTollKrw ?? 0)).toLocaleString()}원
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {accommodations.length > 0 && (
+              <div style={{ background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)', borderRadius: 10, padding: '8px 12px', border: '1px solid #DDD6FE' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--purple)', marginBottom: 3 }}>🏨 숙박</div>
+                {accommodations.map(acc => {
+                  const nights = Math.round((new Date(acc.checkOut).getTime() - new Date(acc.checkIn).getTime()) / 86400000)
+                  return (
+                    <div key={acc.id} style={{ marginBottom: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 600, flex: 1, marginRight: 6 }}>{acc.hotelName}</div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--purple)', flexShrink: 0 }}>{((acc.pricePerNightKrw ?? 0) * nights).toLocaleString()}원</div>
+                      </div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text3)' }}>{acc.checkIn} ~ {acc.checkOut} ({nights}박)</div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Day 목록 */}
-          <div style={{ padding: '16px', flex: 1 }}>
+          <div style={{ padding: '14px 16px', flex: 1, overflowY: 'auto' }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.07em', marginBottom: 8 }}>DAY 선택</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {Array.from({ length: totalDays }, (_, i) => i + 1).map(dayNum => {
@@ -309,71 +374,8 @@ export default function TravelPlannerPage() {
               })}
             </div>
 
-            {/* 완료 안내 */}
-            {allDone && (
-              <div style={{ marginTop: 16, padding: '12px 14px', background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 12, border: '1px solid #A7F3D0' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#059669', marginBottom: 4 }}>✅ 전체 일정 완성!</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>마음에 안 드는 Day는 🔄로 재생성 가능해요.</div>
-              </div>
-            )}
           </div>
 
-          {/* 렌트카 */}
-          {carRental && (
-            <div style={{ padding: '0 16px 12px' }}>
-              <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 12, padding: '12px 14px', border: '1px solid #A7F3D0' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#059669', marginBottom: 5 }}>🚗 렌트카</div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>{carRental.carType}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 2 }}>
-                  {carRental.dailyRateKrw?.toLocaleString()}원/일 × {carRental.rentalDays}일
-                </div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#059669', marginTop: 4 }}>
-                  {((carRental.dailyRateKrw ?? 0) * (carRental.rentalDays ?? 0) + (carRental.estimatedFuelKrw ?? 0) + (carRental.estimatedTollKrw ?? 0)).toLocaleString()}원
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 숙박 */}
-          {accommodations.length > 0 && (
-            <div style={{ padding: '0 16px 12px' }}>
-              <div style={{ background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)', borderRadius: 12, padding: '12px 14px', border: '1px solid #DDD6FE' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--purple)', marginBottom: 5 }}>🏨 숙박</div>
-                {accommodations.map(acc => {
-                  const nights = Math.round((new Date(acc.checkOut).getTime() - new Date(acc.checkIn).getTime()) / 86400000)
-                  return (
-                    <div key={acc.id} style={{ marginBottom: 5 }}>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{acc.hotelName}</div>
-                      <div style={{ fontSize: '0.67rem', color: 'var(--text3)' }}>{acc.checkIn} ~ {acc.checkOut} ({nights}박)</div>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--purple)' }}>{((acc.pricePerNightKrw ?? 0) * nights).toLocaleString()}원</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 총 비용 */}
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border-lt)' }}>
-            <div style={{ background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', borderRadius: 14, padding: '16px 18px', border: '1px solid #BFDBFE' }}>
-              <div style={{ fontSize: '0.7rem', color: 'var(--sky-dk)', fontWeight: 600, marginBottom: 4 }}>예상 총 비용</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--sky-dk)' }}>
-                {(costSummary?.totalKrw ?? totalCost).toLocaleString()}<span style={{ fontSize: '0.85rem', fontWeight: 600, marginLeft: 2 }}>원</span>
-              </div>
-              {costSummary && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {([['교통', costSummary.breakdown.transport], ['연료', costSummary.breakdown.fuel], ['숙박', costSummary.breakdown.accommodation], ['렌트카', costSummary.breakdown.rental], ['식사', costSummary.breakdown.food], ['기타', costSummary.breakdown.etc]] as [string, number][])
-                    .filter(([, v]) => v > 0)
-                    .map(([label, val]) => (
-                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-                        <span style={{ color: 'var(--text3)' }}>{label}</span>
-                        <span style={{ fontWeight: 600, color: 'var(--sky-dk)' }}>{val.toLocaleString()}원</span>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
         </aside>
 
         {/* ── 메인 콘텐츠 ──────────────────────────── */}
@@ -666,6 +668,52 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                         <div style={{ fontSize: '0.7rem', color: '#92400E', fontWeight: 600 }}>
                           🚗 교통 정체 +{carBuf}분 대비 (이동 {departRoute?.durationMinutes}분 구간)
                         </div>
+                      )}
+                    </div>
+
+                    {/* Street View 이미지 */}
+                    <img
+                      src={`https://maps.googleapis.com/maps/api/streetview?size=440x150&location=${place.loc.lat},${place.loc.lng}&fov=90&pitch=5&key=${GOOGLE_MAPS_KEY}`}
+                      alt={`${place.loc.name} 거리뷰`}
+                      style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 8, marginTop: 10, display: 'block' }}
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                    />
+
+                    {/* 외부 링크 버튼들 */}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.loc.name}${place.loc.address ? ' ' + place.loc.address : ''}`)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#4285F4', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
+                      >
+                        🗺️ 구글 지도
+                      </a>
+                      {type === 'HOTEL' && (
+                        <>
+                          <a
+                            href={`https://www.booking.com/search.html?ss=${encodeURIComponent(place.loc.name)}`}
+                            target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#003580', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
+                          >
+                            🏨 Booking.com
+                          </a>
+                          <a
+                            href={`https://www.agoda.com/search?city=${encodeURIComponent(place.loc.name)}`}
+                            target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#5C2D91', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
+                          >
+                            🏮 Agoda
+                          </a>
+                        </>
+                      )}
+                      {type === 'RESTAURANT' && (
+                        <a
+                          href={`https://www.google.com/search?q=${encodeURIComponent(place.loc.name + ' 리뷰')}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#EA4335', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
+                        >
+                          ⭐ 리뷰 검색
+                        </a>
                       )}
                     </div>
                   </div>

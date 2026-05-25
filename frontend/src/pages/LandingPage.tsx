@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import AutocompleteInput from '../components/AutocompleteInput'
 import { DEPARTURE_OPTIONS, ALL_DEST, DEST_EMOJI } from '../constants/locations'
-import { SAMPLE_ITINERARIES, SampleItinerary, SampleRoute } from '../constants/sampleItineraries'
+import { SAMPLE_ITINERARIES } from '../constants/sampleItineraries'
+import type { SampleItinerary, SampleRoute } from '../constants/sampleItineraries'
 
 // sessionStorage key — CreateModal이 읽어서 pre-fill
 const SEARCH_KEY = 'dagalle_search'

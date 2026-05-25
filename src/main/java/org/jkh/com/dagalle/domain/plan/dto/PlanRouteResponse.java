@@ -33,7 +33,8 @@ public class PlanRouteResponse {
                         route.getFromLocation().getLng(),
                         route.getFromLocation().getDescription(),
                         route.getFromLocation().getAddress(),
-                        route.getFromLocation().getType()))
+                        route.getFromLocation().getType(),
+                        route.getFromLocation().getExternalId()))
                 .to(new LocationInfo(
                         route.getToLocation().getId(),
                         route.getToLocation().getName(),
@@ -41,7 +42,8 @@ public class PlanRouteResponse {
                         route.getToLocation().getLng(),
                         route.getToLocation().getDescription(),
                         route.getToLocation().getAddress(),
-                        route.getToLocation().getType()))
+                        route.getToLocation().getType(),
+                        route.getToLocation().getExternalId()))
                 .transport(route.getTransport())
                 .departureTime(route.getDepartureTime())
                 .durationMinutes(route.getDurationMinutes())
@@ -51,5 +53,5 @@ public class PlanRouteResponse {
                 .build();
     }
 
-    public record LocationInfo(Long id, String name, Double lat, Double lng, String description, String address, LocationType type) {}
+    public record LocationInfo(Long id, String name, Double lat, Double lng, String description, String address, LocationType type, String placeId) {}
 }

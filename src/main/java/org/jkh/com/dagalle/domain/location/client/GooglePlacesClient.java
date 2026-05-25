@@ -92,6 +92,8 @@ public class GooglePlacesClient {
 
     @SuppressWarnings("unchecked")
     private GooglePlaceResult toResult(Map<String, Object> place) {
+        String placeId = (String) place.getOrDefault("id", "");
+
         Map<String, Object> displayName = (Map<String, Object>) place.get("displayName");
         String name = displayName != null ? (String) displayName.get("text") : "알 수 없음";
 
@@ -115,10 +117,11 @@ public class GooglePlacesClient {
 
         List<String> types = (List<String>) place.getOrDefault("types", List.of());
 
-        return new GooglePlaceResult(name, address, lat, lng, rating, reviewCount, isOpenNow, types);
+        return new GooglePlaceResult(placeId, name, address, lat, lng, rating, reviewCount, isOpenNow, types);
     }
 
     public record GooglePlaceResult(
+            String placeId,
             String name,
             String address,
             double lat,

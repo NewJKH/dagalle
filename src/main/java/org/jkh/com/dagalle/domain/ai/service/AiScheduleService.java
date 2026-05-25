@@ -1006,8 +1006,11 @@ public class AiScheduleService {
                 GooglePlacesClient.GooglePlaceResult hit = results.get(0);
                 lat = hit.lat(); lng = hit.lng(); realAddress = hit.address();
                 source = LocationSource.GOOGLE;
-                externalId = "google-" + name.replaceAll("\\s+", "-") + "-" + date;
-                log.info("[Places] '{}' → ({}, {})", name, lat, lng);
+                // placeId가 있으면 그대로 저장 (구글 리뷰 URL에 사용)
+                externalId = (hit.placeId() != null && !hit.placeId().isBlank())
+                        ? hit.placeId()
+                        : "google-" + name.replaceAll("\\s+", "-") + "-" + date;
+                log.info("[Places] '{}' → ({}, {}) placeId={}", name, lat, lng, hit.placeId());
             } else {
                 // 구글에서 찾지 못한 장소 — AI가 만들어낸 가능성이 높음
                 // description에 경고 표시, 이름 앞에 마커 추가

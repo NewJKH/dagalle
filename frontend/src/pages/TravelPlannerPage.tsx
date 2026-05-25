@@ -5,7 +5,7 @@ import MapView from '../components/MapView'
 import type { MapRoute } from '../components/MapView'
 
 // ── 타입 정의 ─────────────────────────────────────────
-interface LocationInfo { id: number; name: string; lat: number; lng: number; description?: string | null; address?: string | null; type?: string | null }
+interface LocationInfo { id: number; name: string; lat: number; lng: number; description?: string | null; address?: string | null; type?: string | null; placeId?: string | null }
 interface Route {
   id: number; sequence: number
   from: LocationInfo; to: LocationInfo
@@ -751,7 +751,9 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                     {/* 외부 링크 버튼들 */}
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.loc.name}${place.loc.address ? ' ' + place.loc.address : ''}`)}`}
+                        href={place.loc.placeId?.startsWith('ChIJ')
+                          ? `https://www.google.com/maps/place/?q=place_id:${place.loc.placeId}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.loc.name}${place.loc.address ? ' ' + place.loc.address : ''}`)}`}
                         target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#4285F4', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
                       >
@@ -775,15 +777,23 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                           </a>
                         </>
                       )}
-                      {type === 'RESTAURANT' && (
-                        <a
-                          href={`https://www.google.com/search?q=${encodeURIComponent(place.loc.name + ' 리뷰')}`}
-                          target="_blank" rel="noopener noreferrer"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#EA4335', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
-                        >
-                          ⭐ 리뷰 검색
-                        </a>
-                      )}
+                      {/* 구글 리뷰 — place_id 있으면 직링크, 없으면 지도 검색 */}
+                      {(() => {
+                        const pid = place.loc.placeId
+                        const isGooglePlaceId = pid && pid.startsWith('ChIJ')
+                        const reviewUrl = isGooglePlaceId
+                          ? `https://www.google.com/maps/place/?q=place_id:${pid}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.loc.name + (place.loc.address ? ' ' + place.loc.address : ''))}`
+                        return (
+                          <a
+                            href={reviewUrl}
+                            target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#EA4335', color: '#fff', borderRadius: 7, fontSize: '0.7rem', fontWeight: 700, textDecoration: 'none' }}
+                          >
+                            ⭐ 구글 리뷰
+                          </a>
+                        )
+                      })()}
                     </div>
                   </div>
                 )}

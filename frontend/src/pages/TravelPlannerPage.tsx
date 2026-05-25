@@ -5,7 +5,7 @@ import MapView from '../components/MapView'
 import type { MapRoute } from '../components/MapView'
 
 // ── 타입 정의 ─────────────────────────────────────────
-interface LocationInfo { id: number; name: string; lat: number; lng: number; description?: string | null; address?: string | null }
+interface LocationInfo { id: number; name: string; lat: number; lng: number; description?: string | null; address?: string | null; type?: string | null }
 interface Route {
   id: number; sequence: number
   from: LocationInfo; to: LocationInfo
@@ -412,11 +412,7 @@ export default function TravelPlannerPage() {
             {/* Day 완성 — 타임라인 */}
             {dayStatus[selectedDay] === 'done' && currentDay && (
               <div style={{ display: viewMode === 'timeline' ? 'block' : 'none' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
-                  {currentDay.routes.map((route, i) => (
-                    <RouteCard key={route.id} route={route} isLast={i === currentDay.routes.length - 1} />
-                  ))}
-                </div>
+                <PlaceTimeline routes={currentDay.routes} />
                 {/* 다음 Day 생성 유도 */}
                 {selectedDay < totalDays && dayStatus[selectedDay + 1] === 'pending' && (
                   <NextDayBanner dayNum={selectedDay + 1} onGenerate={() => generateDay(selectedDay + 1)} />
@@ -488,66 +484,181 @@ function NextDayBanner({ dayNum, onGenerate }: { dayNum: number; onGenerate: () 
   )
 }
 
-function RouteCard({ route, isLast }: { route: Route; isLast: boolean }) {
+// ── 장소 타입별 아이콘/색상 ───────────────────────────
+const LOC_ICON: Record<string, string>  = { RESTAURANT:'🍽️', CAFE:'☕', HOTEL:'🏨', STATION:'🚉', AIRPORT:'✈️', SHOPPING:'🛍️', MUSEUM:'🏛️', PARK:'🌳', ETC:'📍' }
+const LOC_COLOR: Record<string, string> = { RESTAURANT:'#EF4444', CAFE:'#92400E', HOTEL:'#7C3AED', STATION:'#0284C7', AIRPORT:'#0369A1', SHOPPING:'#DB2777', MUSEUM:'#B45309', PARK:'#16A34A', ETC:'#6366F1' }
+const LOC_BG: Record<string, string>    = { RESTAURANT:'#FFF1F1', CAFE:'#FEF3C7', HOTEL:'#F5F3FF', STATION:'#EFF6FF', AIRPORT:'#E0F2FE', SHOPPING:'#FDF2F8', MUSEUM:'#FFFBEB', PARK:'#F0FDF4', ETC:'#EEF2FF' }
+
+// ── 시간 유틸 ──────────────────────────────────────
+function toHHmm(dt: string): string {
+  if (!dt) return ''
+  return dt.includes('T') ? dt.split('T')[1].substring(0, 5) : dt.substring(0, 5)
+}
+function addMinutes(hhmm: string, mins: number): string {
+  if (!hhmm) return ''
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = h * 60 + m + mins
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+function diffMinutes(from: string, to: string): number {
+  if (!from || !to) return 0
+  const [fh, fm] = from.split(':').map(Number)
+  const [th, tm] = to.split(':').map(Number)
+  return (th * 60 + tm) - (fh * 60 + fm)
+}
+function bufferMinutes(type?: string | null): number {
+  switch (type) {
+    case 'RESTAURANT': return 20
+    case 'MUSEUM':     return 30
+    case 'CAFE':       return 15
+    case 'PARK':       return 20
+    case 'SHOPPING':   return 20
+    case 'HOTEL':      return 10
+    default:           return 15
+  }
+}
+
+// ── 장소 중심 타임라인 ─────────────────────────────
+function PlaceTimeline({ routes }: { routes: Route[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  if (!routes || routes.length === 0) return null
+
+  // 장소 목록 추출: routes[0].from, 이후 각 routes[i].to
+  const places: Array<{ loc: LocationInfo; arrivalTime: string; stayMins: number; idx: number }> = []
+
+  // 첫 번째 장소 (출발지)
+  const firstDepart = toHHmm(routes[0].departureTime)
+  places.push({ loc: routes[0].from, arrivalTime: firstDepart, stayMins: 0, idx: -1 })
+
+  for (let i = 0; i < routes.length; i++) {
+    const r = routes[i]
+    const departTime = toHHmm(r.departureTime)
+    const arrivalTime = addMinutes(departTime, r.durationMinutes)
+    const nextDepartTime = i + 1 < routes.length ? toHHmm(routes[i + 1].departureTime) : ''
+    const stayMins = nextDepartTime ? diffMinutes(arrivalTime, nextDepartTime) : 0
+    places.push({ loc: r.to, arrivalTime, stayMins, idx: i })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 28, animation: 'fadeUp 0.4s ease both' }}>
+      {places.map((place, pi) => {
+        const isLast = pi === places.length - 1
+        const isFirst = pi === 0
+        const locId = `${place.loc.id ?? pi}-${pi}`
+        const expanded = expandedId === locId
+        const type = place.loc.type ?? 'ETC'
+        const locIcon  = LOC_ICON[type]  ?? '📍'
+        const locColor = LOC_COLOR[type] ?? '#6366F1'
+        const locBg    = LOC_BG[type]    ?? '#EEF2FF'
+        const buf = bufferMinutes(type)
+        const departRoute = pi > 0 ? routes[pi - 1] : null  // 이 장소로 오는 route
+        const nextRoute   = pi < routes.length ? routes[pi] : null  // 이 장소에서 나가는 route
+
+        return (
+          <div key={locId}>
+            {/* ── 이동 구간 (첫 장소 제외) ── */}
+            {!isFirst && departRoute && (
+              <MovementArrow route={departRoute} />
+            )}
+
+            {/* ── 장소 카드 ── */}
+            <div
+              onClick={() => setExpandedId(expanded ? null : locId)}
+              style={{
+                display: 'flex', gap: 14, cursor: 'pointer',
+                padding: '14px 18px',
+                background: expanded ? locBg : '#fff',
+                borderRadius: 16,
+                border: `1.5px solid ${expanded ? locColor + '55' : 'var(--border-lt)'}`,
+                boxShadow: expanded ? `0 4px 20px ${locColor}18` : '0 2px 8px rgba(0,0,0,0.04)',
+                transition: 'all 0.2s',
+                position: 'relative',
+              }}
+              onMouseEnter={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.boxShadow = `0 6px 20px ${locColor}15`; (e.currentTarget as HTMLDivElement).style.borderColor = `${locColor}44` } }}
+              onMouseLeave={e => { if (!expanded) { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-lt)' } }}
+            >
+              {/* 타입 아이콘 */}
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: expanded ? '#fff' : locBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0, border: `1.5px solid ${locColor}30`, boxShadow: expanded ? `0 2px 8px ${locColor}20` : 'none', transition: 'all 0.2s' }}>
+                {locIcon}
+              </div>
+
+              {/* 정보 */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)' }}>{place.loc.name}</span>
+                  <span style={{ fontSize: '0.65rem', padding: '2px 7px', borderRadius: 20, background: locBg, color: locColor, fontWeight: 700, border: `1px solid ${locColor}30` }}>{type}</span>
+                </div>
+
+                {/* 도착 시간 + 체류 */}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', background: locColor, padding: '2px 8px', borderRadius: 6 }}>
+                    {isFirst ? '🚀 ' : '📍 '}{place.arrivalTime} 도착
+                  </span>
+                  {place.stayMins > 0 && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>
+                      체류 <strong style={{ color: 'var(--text2)' }}>{place.stayMins}분</strong>
+                      <span style={{ color: locColor, marginLeft: 4, fontWeight: 600 }}>+ {buf}분 여유</span>
+                    </span>
+                  )}
+                  {nextRoute && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text3)', marginLeft: 'auto' }}>
+                      출발 <strong style={{ color: 'var(--text2)' }}>{toHHmm(nextRoute.departureTime)}</strong>
+                    </span>
+                  )}
+                </div>
+
+                {/* 확장: 설명 + 주소 */}
+                {expanded && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${locColor}25` }}>
+                    {place.loc.description && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text2)', lineHeight: 1.6, marginBottom: 8, background: `${locColor}08`, borderLeft: `3px solid ${locColor}60`, borderRadius: '0 8px 8px 0', padding: '8px 12px' }}>
+                        {place.loc.description}
+                      </p>
+                    )}
+                    {place.loc.address && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span>📌</span><span>{place.loc.address}</span>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 8, fontSize: '0.7rem', color: locColor, fontWeight: 600 }}>
+                      ⏳ 여유 시간 +{buf}분 권장 ({type === 'RESTAURANT' ? '음식 대기/식사' : type === 'MUSEUM' ? '관람 여유' : type === 'CAFE' ? '커피 즐기기' : '예비 시간'})
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 펼치기 화살표 */}
+              <div style={{ fontSize: '0.75rem', color: 'var(--text3)', flexShrink: 0, alignSelf: 'center', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'none' }}>▼</div>
+            </div>
+
+            {/* 마지막 장소 아래 여백 */}
+            {isLast && <div style={{ height: 8 }} />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── 이동 화살표 ────────────────────────────────────
+function MovementArrow({ route }: { route: Route }) {
   const icon  = T_ICON[route.transport]  ?? '🚀'
   const color = T_COLOR[route.transport] ?? '#0EA5E9'
   const bg    = T_BG[route.transport]    ?? '#EFF6FF'
   const label = T_LABEL[route.transport] ?? route.transport
-  const timeStr = route.departureTime?.includes('T')
-    ? route.departureTime.split('T')[1].substring(0, 5)
-    : route.departureTime ?? ''
 
   return (
-    <div style={{ display: 'flex', gap: 16, animation: 'fadeUp 0.4s ease both' }}>
-      {/* 타임라인 */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 52, flexShrink: 0 }}>
-        <div style={{ fontSize: '0.66rem', color: '#fff', marginBottom: 6, fontWeight: 700, background: color, padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap' }}>{timeStr}</div>
-        <div style={{ width: 12, height: 12, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 0 4px ${color}25` }}/>
-        {!isLast && <div style={{ width: 2, flex: 1, marginTop: 6, background: `linear-gradient(to bottom, ${color}60, var(--border-lt))`, borderRadius: 1 }}/>}
-      </div>
-
-      {/* 카드 */}
-      <div style={{ flex: 1, background: '#fff', borderRadius: 18, padding: '16px 20px', border: `1px solid ${color}22`, boxShadow: `0 2px 12px ${color}0D`, marginBottom: isLast ? 0 : 4, transition: 'all 0.2s' }}
-        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = `0 8px 28px ${color}20`; (e.currentTarget as HTMLDivElement).style.transform = 'translateX(2px)' }}
-        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = `0 2px 12px ${color}0D`; (e.currentTarget as HTMLDivElement).style.transform = '' }}
-      >
-        {/* 장소명 + 화살표 */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', flexShrink: 0, marginTop: 2 }}>{icon}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
-              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text)' }}>{route.from?.name ?? '출발지'}</span>
-              <span style={{ color, fontSize: '0.85rem', fontWeight: 600 }}>→</span>
-              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text)' }}>{route.to?.name ?? '도착지'}</span>
-            </div>
-            {/* 도착지 음식/장소 설명 */}
-            {route.to?.description && (
-              <div style={{
-                fontSize: '0.78rem', color: 'var(--text2)', lineHeight: 1.55,
-                background: `${color}08`, borderLeft: `3px solid ${color}40`,
-                borderRadius: '0 6px 6px 0', padding: '5px 10px', marginBottom: 6,
-              }}>
-                {route.to.description}
-              </div>
-            )}
-            {/* 이동수단 상세 note (공항 버스 등) */}
-            {route.note && (
-              <div style={{
-                fontSize: '0.72rem', color: '#6366F1', fontWeight: 500,
-                display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2,
-              }}>
-                <span>🗒</span><span>{route.note}</span>
-              </div>
-            )}
-          </div>
-        </div>
-        {/* 이동 메타 정보 */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.7rem', padding: '3px 10px', borderRadius: 20, fontWeight: 700, background: bg, color }}>{icon} {label}</span>
-          <span style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>⏱ <strong style={{ color: 'var(--text2)' }}>{route.durationMinutes}분</strong></span>
-          {route.distanceKm != null && <span style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>📏 <strong style={{ color: 'var(--text2)' }}>{route.distanceKm}km</strong></span>}
-          {route.estimatedCost > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>💰 <strong style={{ color: 'var(--text2)' }}>{route.estimatedCost.toLocaleString()}원</strong></span>}
-        </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 18px', margin: '4px 0' }}>
+      {/* 선 */}
+      <div style={{ width: 2, height: 36, background: `linear-gradient(to bottom, ${color}80, ${color}20)`, borderRadius: 1, marginLeft: 21 }} />
+      {/* 이동 배지 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: bg, border: `1px solid ${color}30`, borderRadius: 20, padding: '5px 12px', flexShrink: 0 }}>
+        <span style={{ fontSize: '0.8rem' }}>{icon}</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color }}>{label}</span>
+        <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>{route.durationMinutes}분</span>
+        {route.estimatedCost > 0 && <span style={{ fontSize: '0.68rem', color: 'var(--text3)' }}>· {route.estimatedCost.toLocaleString()}원</span>}
+        {route.note && <span style={{ fontSize: '0.65rem', color: '#6366F1', marginLeft: 2 }}>🗒 {route.note}</span>}
       </div>
     </div>
   )

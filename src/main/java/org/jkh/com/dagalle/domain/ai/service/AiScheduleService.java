@@ -538,7 +538,16 @@ public class AiScheduleService {
                 "교통: WALK=1km이하/도보15분이내, CAR=3km초과, BUS/TRAIN=도시간이동. WALK 하루 최소1구간.\n" +
                 "장소 description: RESTAURANT/CAFE=대표메뉴+가격대 2~3문장 필수. 그외=주요볼거리·특징 1~2문장.\n" +
                 "공항이동: Day1첫route=도착공항→여행지. 마지막날마지막route=여행지→출발공항.\n" +
-                "렌트카여행: 주차장 기점 → 주변 WALK → 다음지역 CAR. 관광지밀집구역 내 이동은 WALK.";
+                "렌트카여행: 주차장 기점 → 주변 WALK → 다음지역 CAR. 관광지밀집구역 내 이동은 WALK.\n" +
+                "시간대 규칙(departureTime 반드시 준수):\n" +
+                "- 아침카페/시장: 07:00~09:30 방문. 아침식사 07:00~09:00.\n" +
+                "- 오전관광(박물관·미술관·신사·궁): 10:00~13:00.\n" +
+                "- 점심식사(RESTAURANT): 11:30~13:30 도착.\n" +
+                "- 오후관광(공원·쇼핑): 14:00~17:00.\n" +
+                "- 온천(type=ETC 온천): 15:00 이후 또는 07:00 이전 조식 전.\n" +
+                "- 저녁식사(RESTAURANT): 18:00~20:30 도착.\n" +
+                "- 야경·야시장·루프탑바: 19:00 이후 출발. 분위기 중요한 야간 명소는 반드시 일몰 후.\n" +
+                "- 숙소 체크인: 마지막 관광 후 21:00 이전.";
 
         String prefRules = buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
         return base + prefRules;
@@ -597,7 +606,8 @@ public class AiScheduleService {
                 " 4~6 route.\n" +
                 "교통: WALK=1km이하/15분이내, CAR=3km초과, BUS/TRAIN=도시간. WALK 최소1구간.\n" +
                 "RESTAURANT/CAFE description=대표메뉴+가격대 필수.\n" +
-                "Day1첫route=공항→여행지. 마지막날마지막route=여행지→공항.";
+                "Day1첫route=공항→여행지. 마지막날마지막route=여행지→공항.\n" +
+                "시간대 규칙: 아침카페/시장=07:00~09:30. 점심=11:30~13:30. 온천=15:00이후. 저녁=18:00~20:30. 야경·야시장=19:00이후. 박물관·신사=10:00~17:00.";
 
         return base + buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
     }

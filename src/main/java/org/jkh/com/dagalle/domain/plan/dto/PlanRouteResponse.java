@@ -2,6 +2,7 @@ package org.jkh.com.dagalle.domain.plan.dto;
 
 import lombok.Builder;
 import lombok.Getter;
+import org.jkh.com.dagalle.domain.location.entity.LocationType;
 import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
 import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 
@@ -31,14 +32,16 @@ public class PlanRouteResponse {
                         route.getFromLocation().getLat(),
                         route.getFromLocation().getLng(),
                         route.getFromLocation().getDescription(),
-                        route.getFromLocation().getAddress()))
+                        route.getFromLocation().getAddress(),
+                        route.getFromLocation().getType()))
                 .to(new LocationInfo(
                         route.getToLocation().getId(),
                         route.getToLocation().getName(),
                         route.getToLocation().getLat(),
                         route.getToLocation().getLng(),
                         route.getToLocation().getDescription(),
-                        route.getToLocation().getAddress()))
+                        route.getToLocation().getAddress(),
+                        route.getToLocation().getType()))
                 .transport(route.getTransport())
                 .departureTime(route.getDepartureTime())
                 .durationMinutes(route.getDurationMinutes())
@@ -48,5 +51,5 @@ public class PlanRouteResponse {
                 .build();
     }
 
-    public record LocationInfo(Long id, String name, Double lat, Double lng, String description, String address) {}
+    public record LocationInfo(Long id, String name, Double lat, Double lng, String description, String address, LocationType type) {}
 }

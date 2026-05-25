@@ -21,7 +21,14 @@ interface TravelInfo {
 }
 interface CarRental { id: number; carType: string; dailyRateKrw: number; rentalDays: number; estimatedFuelKrw: number; estimatedTollKrw: number }
 interface Accommodation { id: number; hotelName: string; checkIn: string; checkOut: string; pricePerNightKrw: number }
-interface CostSummary { totalKrw: number; breakdown: { transport: number; fuel: number; accommodation: number; rental: number; food: number; etc: number } }
+interface CostSummary {
+  totalKrw: number
+  flightPerPersonKrw: number
+  teamTotalKrw: number
+  perPersonKrw: number
+  memberCount: number
+  breakdown: { transport: number; fuel: number; accommodation: number; rental: number; flight: number; food: number; etc: number }
+}
 
 // ── 교통수단 스타일 ───────────────────────────────────
 const T_ICON:  Record<string, string> = { CAR:'🚗', WALK:'🚶', SUBWAY:'🚇', BUS:'🚌', TRAIN:'🚂' }
@@ -238,23 +245,68 @@ export default function TravelPlannerPage() {
             )}
 
             <div style={{ background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', borderRadius: 12, padding: '10px 12px', border: '1px solid #BFDBFE' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <div style={{ fontSize: '0.67rem', color: 'var(--sky-dk)', fontWeight: 600 }}>예상 총 비용</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--sky-dk)' }}>
-                  {(costSummary?.totalKrw ?? totalCost).toLocaleString()}<span style={{ fontSize: '0.72rem', marginLeft: 2 }}>원</span>
-                </div>
-              </div>
-              {costSummary && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {([['교통', costSummary.breakdown.transport], ['연료', costSummary.breakdown.fuel], ['숙박', costSummary.breakdown.accommodation], ['렌트카', costSummary.breakdown.rental], ['식사', costSummary.breakdown.food], ['기타', costSummary.breakdown.etc]] as [string, number][])
-                    .filter(([, v]) => v > 0)
-                    .map(([label, val]) => (
-                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem' }}>
-                        <span style={{ color: 'var(--text3)' }}>{label}</span>
-                        <span style={{ fontWeight: 600, color: 'var(--sky-dk)' }}>{val.toLocaleString()}원</span>
-                      </div>
-                    ))}
-                </div>
+              {/* 1인 / 팀 경비 토글 탭 */}
+              {costSummary ? (
+                <>
+                  {/* 1인 경비 */}
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--sky-dk)', fontWeight: 600, marginBottom: 2 }}>
+                      👤 1인 예상 경비
+                    </div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--sky-dk)', lineHeight: 1 }}>
+                      {costSummary.perPersonKrw.toLocaleString()}<span style={{ fontSize: '0.7rem', fontWeight: 600, marginLeft: 2 }}>원</span>
+                    </div>
+                    <div style={{ fontSize: '0.63rem', color: '#64748B', marginTop: 2 }}>
+                      ✈️ 항공 {costSummary.flightPerPersonKrw.toLocaleString()}원 포함
+                    </div>
+                  </div>
+
+                  {/* 구분선 */}
+                  <div style={{ borderTop: '1px dashed #BFDBFE', margin: '6px 0' }} />
+
+                  {/* 팀 경비 */}
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: '0.65rem', color: '#7C3AED', fontWeight: 600, marginBottom: 2 }}>
+                      👥 팀 전체 ({costSummary.memberCount}명)
+                    </div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#7C3AED' }}>
+                      {costSummary.teamTotalKrw.toLocaleString()}<span style={{ fontSize: '0.7rem', fontWeight: 600, marginLeft: 2 }}>원</span>
+                    </div>
+                    <div style={{ fontSize: '0.63rem', color: '#64748B', marginTop: 1 }}>
+                      1인 {costSummary.perPersonKrw.toLocaleString()}원 × {costSummary.memberCount}명
+                    </div>
+                  </div>
+
+                  {/* 구분선 */}
+                  <div style={{ borderTop: '1px solid #BFDBFE', margin: '6px 0' }} />
+
+                  {/* 항목별 breakdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {([
+                      ['✈️ 항공', costSummary.breakdown.flight],
+                      ['🚌 교통', costSummary.breakdown.transport],
+                      ['⛽ 연료·주차', costSummary.breakdown.fuel],
+                      ['🏨 숙박', costSummary.breakdown.accommodation],
+                      ['🚗 렌트카', costSummary.breakdown.rental],
+                      ['🍽️ 식사', costSummary.breakdown.food],
+                    ] as [string, number][])
+                      .filter(([, v]) => v > 0)
+                      .map(([label, val]) => (
+                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem' }}>
+                          <span style={{ color: 'var(--text3)' }}>{label}</span>
+                          <span style={{ fontWeight: 600, color: 'var(--sky-dk)' }}>{val.toLocaleString()}원</span>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              ) : (
+                /* costSummary 없을 때 간단 표시 */
+                <>
+                  <div style={{ fontSize: '0.67rem', color: 'var(--sky-dk)', fontWeight: 600, marginBottom: 4 }}>예상 총 비용</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--sky-dk)' }}>
+                    {totalCost.toLocaleString()}<span style={{ fontSize: '0.72rem', marginLeft: 2 }}>원</span>
+                  </div>
+                </>
               )}
             </div>
 

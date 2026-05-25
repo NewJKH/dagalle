@@ -536,6 +536,9 @@ public class AiScheduleService {
                     : "한국 실제 좌표·원화 요금 기준.") +
                 " 하루 4~6개 route.\n" +
                 "교통: WALK=1km이하/도보15분이내, CAR=3km초과, BUS/TRAIN=도시간이동. WALK 하루 최소1구간.\n" +
+                "CAR 이동 규칙:\n" +
+                "- durationMinutes에 교통 정체 여유 포함(시내 +10분, 고속도로 +15분, 관광지 주차 +20분).\n" +
+                "- 하루 CAR 총 이동 3시간 초과 시: 중간에 주유소/휴게소 route 1개 추가(장소명='고속도로 휴게소' 또는 '주유소', type=ETC, durationMinutes=20).\n" +
                 "장소 description: RESTAURANT/CAFE=대표메뉴+가격대 2~3문장 필수. 그외=주요볼거리·특징 1~2문장.\n" +
                 "공항이동: Day1첫route=도착공항→여행지. 마지막날마지막route=여행지→출발공항.\n" +
                 "렌트카여행: 주차장 기점 → 주변 WALK → 다음지역 CAR. 관광지밀집구역 내 이동은 WALK.\n" +
@@ -605,6 +608,7 @@ public class AiScheduleService {
                     : "한국 실제 좌표·원화 기준.") +
                 " 4~6 route.\n" +
                 "교통: WALK=1km이하/15분이내, CAR=3km초과, BUS/TRAIN=도시간. WALK 최소1구간.\n" +
+                "CAR: durationMinutes에 정체 여유 포함(시내+10분, 고속도로+15분). 하루 CAR 3시간초과 시 휴게소/주유소 route 추가(type=ETC, 20분).\n" +
                 "RESTAURANT/CAFE description=대표메뉴+가격대 필수.\n" +
                 "Day1첫route=공항→여행지. 마지막날마지막route=여행지→공항.\n" +
                 "시간대 규칙: 아침카페/시장=07:00~09:30. 점심=11:30~13:30. 온천=15:00이후. 저녁=18:00~20:30. 야경·야시장=19:00이후. 박물관·신사=10:00~17:00.";

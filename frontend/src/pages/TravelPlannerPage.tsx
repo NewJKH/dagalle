@@ -518,6 +518,15 @@ function bufferMinutes(type?: string | null): number {
   }
 }
 
+// 차량 이동 시 교통 정체 여유 (이동 시간 비례)
+function trafficBuffer(durationMins: number): number {
+  if (durationMins < 15) return 0   // 근거리 이동은 정체 미반영
+  if (durationMins < 40) return 10
+  if (durationMins < 90) return 15
+  if (durationMins < 150) return 20
+  return 30
+}
+
 // ── 장소 중심 타임라인 ─────────────────────────────
 function PlaceTimeline({ routes }: { routes: Route[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -540,6 +549,11 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
     places.push({ loc: r.to, arrivalTime, stayMins, idx: i })
   }
 
+  // 하루 총 CAR 이동 시간 → 주유 필요 여부 판단
+  const totalCarMins = routes.filter(r => r.transport === 'CAR').reduce((s, r) => s + r.durationMinutes, 0)
+  const needsRefuel  = totalCarMins >= 90   // 90분 이상 주행 시 주유 권장
+  const refuelWarn   = totalCarMins >= 180  // 3시간 이상이면 경고
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 28, animation: 'fadeUp 0.4s ease both' }}>
       {places.map((place, pi) => {
@@ -554,6 +568,7 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
         const buf = bufferMinutes(type)
         const departRoute = pi > 0 ? routes[pi - 1] : null  // 이 장소로 오는 route
         const nextRoute   = pi < routes.length ? routes[pi] : null  // 이 장소에서 나가는 route
+        const carBuf = (departRoute?.transport === 'CAR') ? trafficBuffer(departRoute.durationMinutes) : 0
 
         return (
           <div key={locId}>
@@ -591,10 +606,16 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                 </div>
 
                 {/* 도착 시간 + 체류 */}
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', background: locColor, padding: '2px 8px', borderRadius: 6 }}>
                     {isFirst ? '🚀 ' : '📍 '}{place.arrivalTime} 도착
                   </span>
+                  {/* 교통 정체 여유 (CAR 이동 후) */}
+                  {carBuf > 0 && (
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 7px', borderRadius: 6, border: '1px solid #FDE68A' }}>
+                      🚗 정체 +{carBuf}분
+                    </span>
+                  )}
                   {place.stayMins > 0 && (
                     <span style={{ fontSize: '0.72rem', color: 'var(--text3)' }}>
                       체류 <strong style={{ color: 'var(--text2)' }}>{place.stayMins}분</strong>
@@ -621,8 +642,15 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                         <span>📌</span><span>{place.loc.address}</span>
                       </div>
                     )}
-                    <div style={{ marginTop: 8, fontSize: '0.7rem', color: locColor, fontWeight: 600 }}>
-                      ⏳ 여유 시간 +{buf}분 권장 ({type === 'RESTAURANT' ? '음식 대기/식사' : type === 'MUSEUM' ? '관람 여유' : type === 'CAFE' ? '커피 즐기기' : '예비 시간'})
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <div style={{ fontSize: '0.7rem', color: locColor, fontWeight: 600 }}>
+                        ⏳ 장소 여유 +{buf}분 ({type === 'RESTAURANT' ? '음식 대기·식사' : type === 'MUSEUM' ? '관람 여유' : type === 'CAFE' ? '커피 즐기기' : '예비 시간'})
+                      </div>
+                      {carBuf > 0 && (
+                        <div style={{ fontSize: '0.7rem', color: '#92400E', fontWeight: 600 }}>
+                          🚗 교통 정체 +{carBuf}분 대비 (이동 {departRoute?.durationMinutes}분 구간)
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -637,6 +665,28 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
           </div>
         )
       })}
+      {/* 주유 안내 배너 */}
+      {needsRefuel && (
+        <div style={{
+          marginTop: 12, padding: '12px 16px', borderRadius: 14,
+          background: refuelWarn ? 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' : 'linear-gradient(135deg, #FFFBEB, #FEF3C7)',
+          border: `1px solid ${refuelWarn ? '#FED7AA' : '#FDE68A'}`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: '1.3rem' }}>⛽</span>
+          <div>
+            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: refuelWarn ? '#9A3412' : '#92400E', marginBottom: 2 }}>
+              {refuelWarn ? '⚠️ 주유 필수 구간' : '주유 권장'}
+            </div>
+            <div style={{ fontSize: '0.7rem', color: refuelWarn ? '#B45309' : '#A16207' }}>
+              오늘 차량 이동 {totalCarMins}분 예정 —
+              {refuelWarn
+                ? ' 출발 전 또는 중간 경유 시 반드시 주유하세요.'
+                : ' 출발 전 연료를 확인하세요.'}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

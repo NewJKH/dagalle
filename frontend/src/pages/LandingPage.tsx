@@ -75,8 +75,52 @@ const TRANS_LABEL: Record<string, string> = {
 
 // ── 샘플 일정 미리보기 모달 ──────────────────────────────
 function SampleModal({ itinerary, onClose }: { itinerary: SampleItinerary; onClose: () => void }) {
+  const navigate = useNavigate()
   const [activeDay, setActiveDay] = useState(1)
   const day = itinerary.schedule.find(d => d.dayNumber === activeDay)!
+  const [importing, setImporting] = useState(false)
+  const [importErr, setImportErr] = useState('')
+
+  const handleImport = async () => {
+    const token = localStorage.getItem('accessToken')
+    if (!token) {
+      onClose()
+      navigate('/login')
+      return
+    }
+    setImporting(true)
+    setImportErr('')
+    try {
+      const today = new Date()
+      const startDate = today.toISOString().split('T')[0]
+      const endDate = new Date(today.getTime() + itinerary.nights * 86400000).toISOString().split('T')[0]
+
+      const res = await fetch('/api/v1/travels/import/sample', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: itinerary.title,
+          countryCode: itinerary.countryCode,
+          destination: itinerary.destination,
+          startDate,
+          endDate,
+          transport: itinerary.transport,
+          schedule: itinerary.schedule,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.data?.id) {
+        onClose()
+        navigate(`/travels/${data.data.id}`)
+      } else {
+        setImportErr(data.message ?? '일정 저장 중 오류가 발생했어요.')
+      }
+    } catch {
+      setImportErr('네트워크 오류가 발생했어요.')
+    } finally {
+      setImporting(false)
+    }
+  }
 
   // 장소 목록 추출
   const places = day.routes.length > 0
@@ -153,6 +197,30 @@ function SampleModal({ itinerary, onClose }: { itinerary: SampleItinerary; onClo
         <div style={{ padding: '12px 20px 4px', flexShrink: 0 }}>
           <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#444' }}>{day.label}</div>
         </div>
+
+        {/* ── 내 일정에 추가 버튼 ── */}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #F0F0F0', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={handleImport}
+            disabled={importing}
+            style={{
+              flex: 1, padding: '13px 0', borderRadius: 12, border: 'none',
+              background: importing ? '#C7D2FE' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+              color: '#fff', fontSize: '0.95rem', fontWeight: 800, cursor: importing ? 'not-allowed' : 'pointer',
+              boxShadow: importing ? 'none' : '0 4px 16px rgba(99,102,241,0.35)',
+              transition: 'all 0.2s', letterSpacing: '-0.01em',
+            }}
+          >
+            {importing ? '⏳ 저장 중...' : '✈️ 내 일정에 추가하기'}
+          </button>
+          <button onClick={onClose} style={{
+            padding: '13px 20px', borderRadius: 12, border: '1.5px solid #E5E7EB',
+            background: '#fff', color: '#6B7280', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer',
+          }}>닫기</button>
+        </div>
+        {importErr && (
+          <div style={{ padding: '8px 20px 14px', color: '#EF4444', fontSize: '0.78rem', textAlign: 'center' }}>{importErr}</div>
+        )}
 
         {/* ── 타임라인 ── */}
         <div style={{ overflowY: 'auto', padding: '4px 20px 24px', flex: 1 }}>

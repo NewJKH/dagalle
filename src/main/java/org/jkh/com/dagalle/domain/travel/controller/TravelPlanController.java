@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.response.ApiResponse;
 import org.jkh.com.dagalle.common.security.UserPrincipal;
 import org.jkh.com.dagalle.domain.travel.dto.InviteRequest;
+import org.jkh.com.dagalle.domain.travel.dto.SampleImportRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelCreateRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelResponse;
 import org.jkh.com.dagalle.domain.travel.dto.TravelUpdateRequest;
@@ -32,6 +33,16 @@ public class TravelPlanController {
     public ApiResponse<TravelResponse> create(@AuthenticationPrincipal UserPrincipal principal,
                                               @Valid @RequestBody TravelCreateRequest request) {
         return ApiResponse.ok(travelPlanService.create(principal.getId(), request));
+    }
+
+    @Operation(summary = "샘플 일정 → 내 일정으로 저장",
+            description = "추천 여행 샘플 데이터를 그대로 내 여행 계획으로 복사합니다. 전체 일정(장소·루트)이 즉시 저장됩니다.")
+    @PostMapping("/import/sample")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<TravelResponse> importSample(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody SampleImportRequest request) {
+        return ApiResponse.ok(travelPlanService.importSample(principal.getId(), request));
     }
 
     @Operation(summary = "내 여행 목록 조회", description = "내가 속한 모든 여행(OWNER + MEMBER)을 반환합니다.")

@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface LocationRepository extends JpaRepository<Location, Long> {
     Optional<Location> findByExternalIdAndSource(String externalId, LocationSource source);
 
+    Optional<Location> findByNameAndLatAndLng(String name, Double lat, Double lng);
+
     @Query(value = """
         SELECT *, (6371 * ACOS(COS(RADIANS(:lat)) * COS(RADIANS(lat))
             * COS(RADIANS(lng) - RADIANS(:lng)) + SIN(RADIANS(:lat)) * SIN(RADIANS(lat))))

@@ -3,9 +3,17 @@ package org.jkh.com.dagalle.domain.travel.service;
 import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
+import org.jkh.com.dagalle.domain.location.entity.Location;
+import org.jkh.com.dagalle.domain.location.entity.LocationSource;
+import org.jkh.com.dagalle.domain.location.entity.LocationType;
+import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
 import org.jkh.com.dagalle.domain.plan.entity.PlanDay;
+import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
+import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
+import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
 import org.jkh.com.dagalle.domain.travel.dto.InviteRequest;
+import org.jkh.com.dagalle.domain.travel.dto.SampleImportRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelCreateRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelResponse;
 import org.jkh.com.dagalle.domain.travel.dto.TravelUpdateRequest;
@@ -20,6 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +40,8 @@ public class TravelPlanService {
     private final TravelPlanRepository travelPlanRepository;
     private final TravelMemberRepository travelMemberRepository;
     private final PlanDayRepository planDayRepository;
+    private final PlanRouteRepository planRouteRepository;
+    private final LocationRepository locationRepository;
     private final UserRepository userRepository;
 
     @Transactional
@@ -114,6 +126,105 @@ public class TravelPlanService {
         TravelMember member = travelMemberRepository.findByTravelPlanAndUser(travel, target)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         travelMemberRepository.delete(member);
+    }
+
+    /**
+     * 샘플 일정 → 내 일정으로 저장
+     */
+    @Transactional
+    public TravelResponse importSample(Long userId, SampleImportRequest req) {
+        User owner = getUser(userId);
+
+        // 1. TravelPlan 생성
+        TravelPlan travel = TravelPlan.builder()
+                .owner(owner)
+                .title(req.getTitle())
+                .startLocation("인천국제공항")
+                .endLocation(req.getDestination())
+                .startDate(req.getStartDate())
+                .endDate(req.getEndDate())
+                .countryCode(req.getCountryCode())
+                .memberCount(1)
+                .build();
+        travelPlanRepository.save(travel);
+
+        // 2. OWNER 멤버
+        travelMemberRepository.save(TravelMember.builder()
+                .travelPlan(travel)
+                .user(owner)
+                .role(MemberRole.OWNER)
+                .build());
+
+        // 3. PlanDay + PlanRoute 생성
+        if (req.getSchedule() != null) {
+            for (SampleImportRequest.SampleDayDto dayDto : req.getSchedule()) {
+                LocalDate dayDate = req.getStartDate().plusDays(dayDto.getDayNumber() - 1);
+                PlanDay planDay = planDayRepository.save(
+                        PlanDay.builder()
+                                .travelPlan(travel)
+                                .dayNumber(dayDto.getDayNumber())
+                                .date(dayDate)
+                                .build()
+                );
+
+                if (dayDto.getRoutes() == null) continue;
+                int seq = 1;
+                for (SampleImportRequest.SampleRouteDto routeDto : dayDto.getRoutes()) {
+                    Location from = saveOrGetLocation(routeDto.getFrom());
+                    Location to   = saveOrGetLocation(routeDto.getTo());
+
+                    LocalDateTime depTime = null;
+                    if (routeDto.getDepartureTime() != null && !routeDto.getDepartureTime().isBlank()) {
+                        try {
+                            LocalTime t = LocalTime.parse(routeDto.getDepartureTime());
+                            depTime = dayDate.atTime(t);
+                        } catch (Exception ignored) {}
+                    }
+
+                    TransportType transport = parseTransport(routeDto.getTransport());
+
+                    planRouteRepository.save(PlanRoute.builder()
+                            .planDay(planDay)
+                            .sequence(seq++)
+                            .fromLocation(from)
+                            .toLocation(to)
+                            .transport(transport)
+                            .departureTime(depTime)
+                            .durationMinutes(routeDto.getDurationMinutes())
+                            .estimatedCost(routeDto.getEstimatedCost())
+                            .note(routeDto.getNote())
+                            .build());
+                }
+            }
+        }
+
+        return TravelResponse.from(travel);
+    }
+
+    private Location saveOrGetLocation(SampleImportRequest.SampleLocationDto dto) {
+        // 같은 이름 + lat/lng 이면 재사용
+        return locationRepository.findByNameAndLatAndLng(dto.getName(), dto.getLat(), dto.getLng())
+                .orElseGet(() -> locationRepository.save(Location.builder()
+                        .name(dto.getName())
+                        .address(dto.getAddress())
+                        .lat(dto.getLat())
+                        .lng(dto.getLng())
+                        .type(parseLocationType(dto.getType()))
+                        .source(LocationSource.USER)
+                        .description(dto.getDescription())
+                        .build()));
+    }
+
+    private LocationType parseLocationType(String type) {
+        if (type == null) return LocationType.ETC;
+        try { return LocationType.valueOf(type); }
+        catch (Exception e) { return LocationType.ETC; }
+    }
+
+    private TransportType parseTransport(String t) {
+        if (t == null) return TransportType.WALK;
+        try { return TransportType.valueOf(t); }
+        catch (Exception e) { return TransportType.WALK; }
     }
 
     private void createPlanDays(TravelPlan travel) {

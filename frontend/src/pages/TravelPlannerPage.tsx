@@ -681,8 +681,15 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
               {/* 정보 */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)' }}>{place.loc.name}</span>
+                  <span style={{ fontWeight: 800, fontSize: '0.95rem', color: place.loc.name.startsWith('⚠️') ? '#B45309' : 'var(--text)' }}>
+                    {place.loc.name}
+                  </span>
                   <span style={{ fontSize: '0.65rem', padding: '2px 7px', borderRadius: 20, background: locBg, color: locColor, fontWeight: 700, border: `1px solid ${locColor}30` }}>{type}</span>
+                  {place.loc.name.startsWith('⚠️') && (
+                    <span style={{ fontSize: '0.62rem', background: '#FEF3C7', color: '#92400E', padding: '2px 7px', borderRadius: 4, border: '1px solid #FDE68A', fontWeight: 700 }}>
+                      구글 미확인
+                    </span>
+                  )}
                 </div>
 
                 {/* 도착 시간 + 체류 */}

@@ -10,6 +10,7 @@ import org.jkh.com.dagalle.common.security.UserPrincipal;
 import org.jkh.com.dagalle.domain.ai.dto.AiFillRequest;
 import org.jkh.com.dagalle.domain.ai.dto.AiGenerateRequest;
 import org.jkh.com.dagalle.domain.ai.dto.AiNaturalRequest;
+import org.jkh.com.dagalle.domain.ai.dto.DayModifyRequest;
 import org.jkh.com.dagalle.domain.ai.service.AiScheduleService;
 import org.jkh.com.dagalle.domain.plan.dto.PlanDayResponse;
 import org.jkh.com.dagalle.domain.travel.dto.TravelResponse;
@@ -67,6 +68,17 @@ public class AiScheduleController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody AiGenerateRequest request) {
         return ApiResponse.ok(aiScheduleService.generateSchedule(principal.getId(), request));
+    }
+
+    @Operation(summary = "AI Day 수정 (자연어 요청)",
+            description = "기존 일정을 유지하면서 사용자 요청사항만 반영하여 Day를 재생성합니다.")
+    @PostMapping("/{travelId}/ai/day/{dayNumber}/modify")
+    public ApiResponse<PlanDayResponse> modifyDay(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long travelId,
+            @PathVariable Integer dayNumber,
+            @Valid @RequestBody DayModifyRequest request) {
+        return ApiResponse.ok(aiScheduleService.modifyDay(principal.getId(), travelId, dayNumber, request.getPrompt()));
     }
 
     @Operation(summary = "빈 시간 채우기",

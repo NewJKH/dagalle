@@ -201,7 +201,101 @@ public class AiScheduleService {
     }
 
     // ──────────────────────────────────────────────
-    //  ⑤ 빈 시간 채우기 (Claude 1회, 사용자 요청 시)
+    //  ⑤ Day 자연어 수정 (Claude 1회)
+    //     기존 일정 컨텍스트 + 사용자 요청 → 수정 반영
+    // ──────────────────────────────────────────────
+
+    @Transactional
+    public PlanDayResponse modifyDay(Long userId, Long travelId, int dayNumber, String userPrompt) {
+        TravelPlan travel = getAccessibleTravel(userId, travelId);
+        LocalDate date = travel.getStartDate().plusDays(dayNumber - 1);
+
+        // 기존 일정 JSON 요약 추출
+        String currentJson = buildCurrentDayContext(travel, dayNumber);
+
+        // 기존 Day 삭제
+        planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
+                .ifPresent(planDayRepository::delete);
+        planDayRepository.flush();
+
+        log.info("[AI modifyDay] travelId={}, day={}, prompt='{}'", travelId, dayNumber, userPrompt);
+
+        String raw = claudeApiClient.chat(
+                buildModifySystemPrompt(travel.getCountryCode(),
+                        travel.getFoodScore(), travel.getAccommodationScore(),
+                        travel.getExtremeScore(), travel.getTransportScore()),
+                buildModifyUserMessage(travel, dayNumber, date, currentJson, userPrompt));
+        log.debug("[AI modify 응답] {}", raw);
+
+        JsonNode dayNode = parseJson(raw);
+        savePlanDay(travel, dayNode, dayNumber, date);
+
+        entityManager.flush();
+        entityManager.clear();
+        TravelPlan fresh = travelPlanRepository.findById(travelId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
+        return planDayRepository.findByTravelPlanAndDayNumber(fresh, dayNumber)
+                .map(PlanDayResponse::from)
+                .orElseThrow(() -> new IllegalStateException("수정 후 조회 실패: day=" + dayNumber));
+    }
+
+    /** 기존 Day 일정을 Claude에 전달할 간결한 텍스트로 변환 */
+    private String buildCurrentDayContext(TravelPlan travel, int dayNumber) {
+        return planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
+                .map(day -> {
+                    StringBuilder sb = new StringBuilder();
+                    for (PlanRoute r : day.getRoutes()) {
+                        sb.append(String.format("[%s] %s→%s (%s, %d분, %d원)\n",
+                                r.getDepartureTime() != null
+                                        ? r.getDepartureTime().toLocalTime().toString().substring(0, 5)
+                                        : "?",
+                                r.getFromLocation().getName(),
+                                r.getToLocation().getName(),
+                                r.getTransport(),
+                                r.getDurationMinutes() != null ? r.getDurationMinutes() : 0,
+                                r.getEstimatedCost() != null ? r.getEstimatedCost() : 0));
+                    }
+                    return sb.toString();
+                })
+                .orElse("(기존 일정 없음)");
+    }
+
+    /** 수정 전용 시스템 프롬프트 */
+    private String buildModifySystemPrompt(String countryCode,
+                                           int foodScore, int accommodationScore,
+                                           int extremeScore, int transportScore) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        return "JSON만 응답. 마크다운 금지.\n스키마: " + DAY_SCHEMA + "\n" +
+                (isJp ? "일본 실제 좌표·장소. CAR비용=엔×9원." : "한국 실제 좌표·원화.") + "\n" +
+                "【수정 규칙 — 최우선 준수】\n" +
+                "1. 사용자 요청사항만 변경. 요청하지 않은 route는 장소명·좌표·시간 그대로 유지.\n" +
+                "2. 장소 추가 시 → 기존 동선 흐름(지리적 방향)에 자연스럽게 삽입. 왔다갔다 금지.\n" +
+                "3. 장소 교체 시 → 같은 type·비슷한 위치의 장소로 대체. 이전·이후 시간 연동 조정.\n" +
+                "4. 시간 삭제 요청 시 → 해당 route 제거 후 앞뒤 시간 자동 재계산.\n" +
+                "5. departureTime은 '도착시각 + 체류시간' 기준으로 정확히 계산.\n" +
+                "체류시간 기준: 댐·전망대 20~35분. 카페 30~50분. 식사 50~90분. 박물관 90~120분. 신사 30~60분. 쇼핑 60~90분.\n" +
+                "동선: 인접 구역 묶음 배치. 왔다갔다 절대 금지.\n" +
+                buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
+    }
+
+    /** 수정 전용 유저 메시지 */
+    private String buildModifyUserMessage(TravelPlan travel, int dayNumber, LocalDate date,
+                                          String currentJson, String userPrompt) {
+        int totalDays = (int) daysBetween(travel.getStartDate(), travel.getEndDate());
+        String transport = travel.isWithCar() ? "렌트카(CAR/WALK)" : "대중교통(SUBWAY/BUS/TRAIN/WALK)";
+        return String.format(
+                "여행지:%s | %d일차/%d일 | %s | 이동:%s\n" +
+                "【현재 %d일차 일정】\n%s\n" +
+                "【수정 요청】%s\n" +
+                "위 요청을 반영한 %d일차 전체 일정을 JSON으로 출력.",
+                travel.getEndLocation(), dayNumber, totalDays, date, transport,
+                dayNumber, currentJson,
+                userPrompt,
+                dayNumber);
+    }
+
+    // ──────────────────────────────────────────────
+    //  ⑦ 빈 시간 채우기 (Claude 1회, 사용자 요청 시)
     // ──────────────────────────────────────────────
 
     public List<Map<String, Object>> fillFreeTime(Long userId, Long travelId,

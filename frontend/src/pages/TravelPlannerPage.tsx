@@ -491,6 +491,16 @@ export default function TravelPlannerPage() {
                 {selectedDay < totalDays && dayStatus[selectedDay + 1] === 'pending' && (
                   <NextDayBanner dayNum={selectedDay + 1} onGenerate={() => generateDay(selectedDay + 1)} />
                 )}
+                {/* AI 수정 요청 입력창 */}
+                <DayModifyBox
+                  travelId={id!}
+                  dayNum={selectedDay}
+                  token={token()}
+                  onModified={(newDay) => {
+                    setDays(prev => [...prev.filter(d => d.dayNumber !== newDay.dayNumber), newDay].sort((a, b) => a.dayNumber - b.dayNumber))
+                    setDayStatus(s => ({ ...s, [newDay.dayNumber]: 'done' }))
+                  }}
+                />
               </div>
             )}
 
@@ -782,6 +792,134 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
         )
       })}
 
+    </div>
+  )
+}
+
+// ── Day AI 수정 입력창 ──────────────────────────────
+const EXAMPLE_PROMPTS = [
+  '오후에 카페 한 곳 추가해줘',
+  '저녁 식당을 더 고급스럽게 바꿔줘',
+  '쇼핑 시간 늘려줘',
+  '오전 일정 여유롭게 바꿔줘',
+  '박물관 대신 공원으로 바꿔줘',
+  '야경 명소 추가해줘',
+]
+
+function DayModifyBox({ travelId, dayNum, token, onModified }: {
+  travelId: string
+  dayNum: number
+  token: string
+  onModified: (day: Day) => void
+}) {
+  const [prompt, setPrompt] = useState('')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [errMsg, setErrMsg] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const submit = async () => {
+    if (!prompt.trim() || status === 'loading') return
+    setStatus('loading')
+    setErrMsg('')
+    try {
+      const res = await fetch(`/api/v1/travels/${travelId}/ai/day/${dayNum}/modify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok && data.data) {
+        onModified(data.data)
+        setStatus('done')
+        setPrompt('')
+        setTimeout(() => setStatus('idle'), 3000)
+      } else {
+        setErrMsg(data.message ?? '수정 중 오류가 발생했어요.')
+        setStatus('error')
+      }
+    } catch {
+      setErrMsg('네트워크 오류가 발생했어요.')
+      setStatus('error')
+    }
+  }
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
+  }
+
+  return (
+    <div style={{ marginTop: 20, borderRadius: 18, border: '1.5px solid #E0E7FF', background: 'linear-gradient(135deg, #F0F4FF, #FAF5FF)', padding: '18px 20px', animation: 'fadeUp 0.4s ease both' }}>
+      {/* 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>✏️</div>
+        <div>
+          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#312E81' }}>AI에게 {dayNum}일차 수정 요청</div>
+          <div style={{ fontSize: '0.7rem', color: '#6B7280', marginTop: 1 }}>원하는 변경사항을 자유롭게 입력하면 AI가 일정을 조정해줘요</div>
+        </div>
+      </div>
+
+      {/* 예시 프롬프트 칩 */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {EXAMPLE_PROMPTS.map(ex => (
+          <button key={ex} onClick={() => { setPrompt(ex); textareaRef.current?.focus() }}
+            style={{ padding: '4px 10px', borderRadius: 20, border: '1px solid #C7D2FE', background: '#fff', color: '#4338CA', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EEF2FF'; b.style.borderColor = '#818CF8' }}
+            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#C7D2FE' }}
+          >{ex}</button>
+        ))}
+      </div>
+
+      {/* 입력창 */}
+      <div style={{ position: 'relative' }}>
+        <textarea
+          ref={textareaRef}
+          value={prompt}
+          onChange={e => { setPrompt(e.target.value); setStatus('idle') }}
+          onKeyDown={handleKey}
+          placeholder={`예: "오후에 온천 추가해줘", "저녁 식당을 스시 오마카세로 바꿔줘", "3시 이후 일정을 더 여유롭게"`}
+          rows={3}
+          maxLength={500}
+          style={{
+            width: '100%', borderRadius: 12, border: '1.5px solid #C7D2FE', padding: '12px 14px',
+            fontSize: '0.85rem', lineHeight: 1.6, resize: 'vertical', outline: 'none',
+            fontFamily: 'inherit', color: '#1E1B4B', background: '#fff',
+            boxSizing: 'border-box', transition: 'border-color 0.15s',
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+          onBlur={e => { e.currentTarget.style.borderColor = '#C7D2FE'; e.currentTarget.style.boxShadow = 'none' }}
+        />
+        <div style={{ position: 'absolute', bottom: 8, right: 10, fontSize: '0.63rem', color: '#9CA3AF' }}>{prompt.length}/500</div>
+      </div>
+
+      {/* 하단: 단축키 안내 + 버튼 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+        <span style={{ fontSize: '0.68rem', color: '#9CA3AF' }}>⌘+Enter 또는 Ctrl+Enter로 전송</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {status === 'done' && (
+            <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, animation: 'fadeUp 0.3s ease' }}>✅ 수정 완료!</span>
+          )}
+          {status === 'error' && (
+            <span style={{ fontSize: '0.72rem', color: '#EF4444' }}>⚠️ {errMsg}</span>
+          )}
+          <button
+            onClick={submit}
+            disabled={!prompt.trim() || status === 'loading'}
+            style={{
+              padding: '9px 20px', borderRadius: 10, border: 'none', fontSize: '0.83rem', fontWeight: 700,
+              background: !prompt.trim() || status === 'loading'
+                ? '#E0E7FF' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+              color: !prompt.trim() || status === 'loading' ? '#A5B4FC' : '#fff',
+              cursor: !prompt.trim() || status === 'loading' ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+              boxShadow: prompt.trim() && status !== 'loading' ? '0 4px 14px rgba(99,102,241,0.35)' : 'none',
+            }}
+          >
+            {status === 'loading'
+              ? <><span style={{ width: 14, height: 14, border: '2px solid #A5B4FC', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> AI 수정 중...</>
+              : '✨ 수정 요청'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

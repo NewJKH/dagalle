@@ -1,5 +1,6 @@
 package org.jkh.com.dagalle.common.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jkh.com.dagalle.common.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -30,7 +32,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException e) {
-        // Claude API 호출 실패, JSON 파싱 오류 등
+        log.error("[IllegalStateException] {}", e.getMessage(), e);
         String msg = e.getMessage() != null ? e.getMessage() : ErrorCode.EXTERNAL_API_ERROR.getMessage();
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(ApiResponse.fail(msg));
@@ -38,6 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
+        log.error("[서버 내부 오류] {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
         return ResponseEntity.internalServerError()
                 .body(ApiResponse.fail(ErrorCode.SERVER_ERROR.getMessage()));
     }

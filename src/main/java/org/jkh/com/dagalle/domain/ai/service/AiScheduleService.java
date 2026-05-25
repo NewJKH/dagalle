@@ -179,13 +179,14 @@ public class AiScheduleService {
                 .map(a -> a.getHotelName() + "(" + a.getCheckIn() + "~" + a.getCheckOut() + ")")
                 .reduce("", (a, b) -> a + b + " ");
         String flightHint = buildFlightHint(travel, dayNumber, totalDays);
+        boolean nightviewUsed = isNightviewAlreadyUsed(travel, dayNumber);
 
         String dayRaw = claudeApiClient.chat(
                 buildDaySystemPrompt(travel.getCountryCode(),
                         travel.getFoodScore(), travel.getAccommodationScore(),
                         travel.getExtremeScore(), travel.getTransportScore()),
                 buildDayUserMessage(travel, dayNumber, totalDays, date,
-                        prevLastLocation, accommodationHint.trim(), flightHint));
+                        prevLastLocation, accommodationHint.trim(), flightHint, nightviewUsed));
         log.debug("[AI day{} 응답] {}", dayNumber, dayRaw);
 
         JsonNode dayNode = parseJson(dayRaw);
@@ -273,7 +274,9 @@ public class AiScheduleService {
                 "3. 장소 교체 시 → 같은 type·비슷한 위치의 장소로 대체. 이전·이후 시간 연동 조정.\n" +
                 "4. 시간 삭제 요청 시 → 해당 route 제거 후 앞뒤 시간 자동 재계산.\n" +
                 "5. departureTime은 '도착시각 + 체류시간' 기준으로 정확히 계산.\n" +
-                "체류시간 기준: 댐·전망대 20~35분. 카페 30~50분. 식사 50~90분. 박물관 90~120분. 신사 30~60분. 쇼핑 60~90분.\n" +
+                "체류시간 기준: 댐·전망대 20~35분. 카페 30~50분. 식사 50~90분. 박물관 90~120분. 신사 30~60분. 쇼핑 60~90분. 온천 60~90분.\n" +
+                "온천: 반드시 19:00 이후 배치. 낮 온천 절대 금지.\n" +
+                "야경·전망대: 전체 여행에서 최대 1회. 이미 다른 Day에 있으면 이 Day 추가 금지.\n" +
                 "동선: 인접 구역 묶음 배치. 왔다갔다 절대 금지.\n" +
                 buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
     }
@@ -665,10 +668,15 @@ public class AiScheduleService {
                 "- 오전관광(박물관·미술관·신사·궁): 10:00~13:00.\n" +
                 "- 점심식사(RESTAURANT): 11:30~13:30 도착.\n" +
                 "- 오후관광(공원·쇼핑): 14:00~17:00.\n" +
-                "- 온천(type=ETC 온천): 15:00 이후 또는 07:00 이전 조식 전.\n" +
+                "- 온천(type=ETC 온천 또는 온천 키워드): 반드시 19:00 이후 배치. 낮·오전 온천 절대 금지. 저녁식사 이후 또는 저녁식사 대신 배치.\n" +
                 "- 저녁식사(RESTAURANT): 18:00~20:30 도착.\n" +
                 "- 야경·야시장·루프탑바: 19:00 이후 출발. 분위기 중요한 야간 명소는 반드시 일몰 후.\n" +
-                "- 숙소 체크인: 마지막 관광 후 21:00 이전.";
+                "- 숙소 체크인: 마지막 관광 후 21:00 이전.\n" +
+                "【중복 방지 절대 규칙 — 전체 여행 일정에서 동일 카테고리 중복 금지】\n" +
+                "- 야경·전망대·야간조망: 전체 여행 통틀어 최대 1회만. 2일차 이후 야경 장소 절대 포함 금지. 야경이 이미 앞 day에 있으면 이 Day에는 야경 제외.\n" +
+                "- 온천: 하루 1회만 배치. 여러 날에 걸쳐 반복 배치 최소화 (료칸 숙박 day는 예외 가능).\n" +
+                "- 같은 이름의 신사·절·관광지: 전체 일정에서 중복 배치 금지.\n" +
+                "- 전망대·산 정상: 전체 일정에서 최대 1회.";
 
         String prefRules = buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
         return base + prefRules;
@@ -707,7 +715,8 @@ public class AiScheduleService {
                 travel.getAccommodationScore(),
                 getAccommodationTypeLabel(travel.getCountryCode(), travel.getAccommodationScore())));
 
-        sb.append(String.format("전체 %d일 일정을 JSON 배열로 출력.", totalDays));
+        sb.append(String.format("전체 %d일 일정을 JSON 배열로 출력.\n", totalDays));
+        sb.append("⚠️ 야경·전망대 스팟은 전체 일정 통틀어 딱 1회만 넣을 것. 온천은 저녁(19:00 이후)에만 배치.");
         return sb.toString();
     }
 
@@ -746,20 +755,27 @@ public class AiScheduleService {
                 "- 온천(ETC): 60~90분.\n" +
                 "- 해수욕장(PARK): 90~150분.\n" +
                 "- 야경·루프탑·야시장: 40~60분.\n" +
-                "시간대 규칙: 아침카페/시장=07:00~09:30. 점심=11:30~13:30. 온천=15:00이후. 저녁=18:00~20:30. 야경·야시장=19:00이후. 박물관·신사=10:00~17:00.";
+                "시간대 규칙: 아침카페/시장=07:00~09:30. 점심=11:30~13:30. 저녁=18:00~20:30. 박물관·신사=10:00~17:00.\n" +
+                "온천 시간대: 반드시 19:00 이후. 낮 온천 절대 금지. 저녁식사 후 배치 권장.\n" +
+                "야경 시간대: 19:00 이후. 이 여행 전체에서 야경은 최대 1회. 이미 다른 Day에 야경이 있으면 이 Day에는 야경 배치 금지.\n" +
+                "【중복 방지】 전망대·야경·야간조망 전체 1회. 온천 하루 1곳. 같은 신사·관광지 이름 중복 금지.";
 
         return base + buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
     }
 
     private String buildDayUserMessage(TravelPlan travel, int dayNum, int totalDays,
                                        LocalDate date, String prevLocation,
-                                       String accommodationHint, String flightHint) {
+                                       String accommodationHint, String flightHint,
+                                       boolean nightviewUsed) {
         String transport = travel.isWithCar()
                 ? "렌트카(장거리CAR, 근거리WALK)"
                 : "대중교통(SUBWAY/BUS/TRAIN, 도보WALK)";
+        String nightviewNote = nightviewUsed
+                ? "⚠️ 이미 이전 Day에 야경·전망대 포함됨 → 이 Day에는 야경·전망대 절대 배치 금지."
+                : "야경·전망대는 전체 여행에서 딱 1회 — 이번이 처음이면 넣어도 되나 반드시 19:00 이후.";
         return String.format(
                 "여행지:%s | %d일차/%d일 | %s | 인원:%d명 | %s | 테마:%s | 키워드:%s\n" +
-                "이전날마지막위치:%s | 숙소:%s | %s\n%d일차 JSON.",
+                "이전날마지막위치:%s | 숙소:%s | %s\n%s\n%d일차 JSON.",
                 travel.getEndLocation(), dayNum, totalDays, date,
                 travel.getMemberCount() != null ? travel.getMemberCount() : 2,
                 transport,
@@ -769,7 +785,23 @@ public class AiScheduleService {
                 prevLocation.isEmpty() ? "미정" : prevLocation,
                 accommodationHint.isEmpty() ? "미정" : accommodationHint,
                 flightHint,
+                nightviewNote,
                 dayNum);
+    }
+
+    /** 이미 생성된 이전 Day들에 야경·전망대 장소가 있는지 확인 */
+    private boolean isNightviewAlreadyUsed(TravelPlan travel, int currentDayNum) {
+        List<String> nightviewKeywords = List.of("야경", "전망대", "루프탑", "야간", "night view", "야타이", "야시장");
+        return planDayRepository.findByTravelPlanOrderByDayNumberAsc(travel).stream()
+                .filter(d -> d.getDayNumber() < currentDayNum)
+                .flatMap(d -> d.getRoutes().stream())
+                .anyMatch(r -> {
+                    String fromName = r.getFromLocation() != null ? r.getFromLocation().getName().toLowerCase() : "";
+                    String toName   = r.getToLocation()   != null ? r.getToLocation().getName().toLowerCase()   : "";
+                    String note     = r.getNote() != null ? r.getNote().toLowerCase() : "";
+                    return nightviewKeywords.stream().anyMatch(k ->
+                            fromName.contains(k) || toName.contains(k) || note.contains(k));
+                });
     }
 
     private String buildFlightHint(TravelPlan travel, int dayNum, int totalDays) {

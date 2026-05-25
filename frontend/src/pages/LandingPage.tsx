@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import AutocompleteInput from '../components/AutocompleteInput'
 import { DEPARTURE_OPTIONS, ALL_DEST, DEST_EMOJI } from '../constants/locations'
+import { SAMPLE_ITINERARIES, SampleItinerary, SampleRoute } from '../constants/sampleItineraries'
 
 // sessionStorage key — CreateModal이 읽어서 pre-fill
 const SEARCH_KEY = 'dagalle_search'
@@ -31,6 +32,245 @@ const STATS = [
   { num: '30+', label: '지원 여행지' },
 ]
 
+// ── 샘플 일정 타임라인 헬퍼 ────────────────────────────
+function addMins(hhmm: string, mins: number): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = h * 60 + m + mins
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+function diffMins(from: string, to: string): number {
+  const [fh, fm] = from.split(':').map(Number)
+  const [th, tm] = to.split(':').map(Number)
+  return (th * 60 + tm) - (fh * 60 + fm)
+}
+function bufferMins(type: string): number {
+  switch (type) {
+    case 'RESTAURANT': return 20
+    case 'MUSEUM':     return 30
+    case 'CAFE':       return 15
+    case 'SHOPPING':   return 20
+    case 'PARK':       return 20
+    default:           return 10
+  }
+}
+function trafficBuf(transport: string, duration: number): number {
+  if (transport !== 'CAR') return 0
+  if (duration < 15)  return 0
+  if (duration < 40)  return 10
+  if (duration < 90)  return 15
+  if (duration < 150) return 20
+  return 30
+}
+const TYPE_ICON: Record<string, string> = {
+  RESTAURANT: '🍽️', CAFE: '☕', MUSEUM: '🏛️', PARK: '🌿',
+  HOTEL: '🏨', STATION: '🚉', AIRPORT: '✈️', SHOPPING: '🛍️', ETC: '📍',
+}
+const TRANS_ICON: Record<string, string> = {
+  WALK: '🚶', SUBWAY: '🚇', BUS: '🚌', TRAIN: '🚆', CAR: '🚗',
+}
+const TRANS_LABEL: Record<string, string> = {
+  WALK: '도보', SUBWAY: '지하철', BUS: '버스', TRAIN: '기차', CAR: '자동차',
+}
+
+// ── 샘플 일정 미리보기 모달 ──────────────────────────────
+function SampleModal({ itinerary, onClose }: { itinerary: SampleItinerary; onClose: () => void }) {
+  const [activeDay, setActiveDay] = useState(1)
+  const day = itinerary.schedule.find(d => d.dayNumber === activeDay)!
+
+  // 장소 목록 추출
+  const places = day.routes.length > 0
+    ? [day.routes[0].from, ...day.routes.map(r => r.to)]
+    : []
+
+  // esc 로 닫기
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [onClose])
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9000,
+      background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '24px 16px',
+    }} onClick={onClose}>
+      <div style={{
+        background: '#fff', borderRadius: 20, width: '100%', maxWidth: 820,
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.3)', overflow: 'hidden',
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* ── 모달 헤더 ── */}
+        <div style={{
+          position: 'relative', height: 180, flexShrink: 0, overflow: 'hidden',
+        }}>
+          <img src={itinerary.imageUrl} alt={itinerary.title}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }} />
+          <button onClick={onClose} style={{
+            position: 'absolute', top: 14, right: 14,
+            width: 34, height: 34, borderRadius: '50%', border: 'none',
+            background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: '1.1rem',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
+          <div style={{ position: 'absolute', bottom: 16, left: 20, right: 20 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+              {itinerary.tags.map(t => (
+                <span key={t} style={{ fontSize: '0.68rem', background: 'rgba(255,255,255,0.22)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>{t}</span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.02em' }}>{itinerary.title}</div>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
+                  🗓️ {itinerary.nights}박{itinerary.days}일 &nbsp;·&nbsp; {itinerary.transport}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.65)' }}>예상 비용</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#FFD966' }}>{itinerary.estimatedCost}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 일차 탭 ── */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #F0F0F0', padding: '0 4px', flexShrink: 0, overflowX: 'auto' }}>
+          {itinerary.schedule.map(d => (
+            <button key={d.dayNumber} onClick={() => setActiveDay(d.dayNumber)} style={{
+              padding: '10px 16px', fontSize: '0.78rem', fontWeight: 700, border: 'none',
+              background: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+              color: activeDay === d.dayNumber ? 'var(--primary)' : '#888',
+              borderBottom: activeDay === d.dayNumber ? '2.5px solid var(--primary)' : '2.5px solid transparent',
+              transition: 'all 0.15s',
+            }}>{d.dayNumber}일차</button>
+          ))}
+        </div>
+
+        {/* ── 일차 레이블 ── */}
+        <div style={{ padding: '12px 20px 4px', flexShrink: 0 }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#444' }}>{day.label}</div>
+        </div>
+
+        {/* ── 타임라인 ── */}
+        <div style={{ overflowY: 'auto', padding: '4px 20px 24px', flex: 1 }}>
+          {places.map((place, pi) => {
+            const prevRoute: SampleRoute | undefined = day.routes[pi - 1]
+            const nextRoute: SampleRoute | undefined = day.routes[pi]
+
+            // 도착 시각 = 이전 route 출발 + 이동시간
+            const arrivalTime = pi === 0 ? null : addMins(prevRoute.departureTime, prevRoute.durationMinutes)
+            // 출발 시각
+            const departureTime = nextRoute?.departureTime ?? null
+            // 체류 시간 = 출발 - 도착
+            const stayMins = arrivalTime && departureTime ? diffMins(arrivalTime, departureTime) : null
+            const buf = bufferMins(place.type)
+
+            return (
+              <div key={pi}>
+                {/* 장소 카드 */}
+                <div style={{
+                  background: '#FAFAFA', borderRadius: 12, border: '1px solid #EBEBEB',
+                  padding: '14px 16px', marginBottom: 0,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    {/* 아이콘 */}
+                    <div style={{
+                      width: 38, height: 38, borderRadius: 10, background: '#fff',
+                      border: '1.5px solid #E8E8E8', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0,
+                    }}>{TYPE_ICON[place.type] ?? '📍'}</div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#1A1A1A' }}>{place.name}</span>
+                        <span style={{ fontSize: '0.65rem', background: '#F0F0F0', color: '#666', padding: '1px 6px', borderRadius: 3, fontWeight: 600 }}>{place.type}</span>
+                      </div>
+
+                      {/* 시간 정보 */}
+                      <div style={{ display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+                        {pi === 0 && departureTime && (
+                          <span style={{ fontSize: '0.72rem', color: '#888', background: '#F5F5F5', padding: '2px 8px', borderRadius: 4 }}>
+                            🕐 {departureTime} 출발
+                          </span>
+                        )}
+                        {arrivalTime && (
+                          <span style={{ fontSize: '0.72rem', color: '#3B82F6', background: '#EFF6FF', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                            도착 {arrivalTime}
+                          </span>
+                        )}
+                        {stayMins !== null && stayMins > 0 && (
+                          <span style={{ fontSize: '0.72rem', color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                            체류 {stayMins}분 {stayMins < buf ? `⚠️ 여유 부족` : `(+${buf}분 이동 준비)`}
+                          </span>
+                        )}
+                        {departureTime && pi > 0 && (
+                          <span style={{ fontSize: '0.72rem', color: '#888', background: '#F5F5F5', padding: '2px 8px', borderRadius: 4 }}>
+                            {departureTime} 출발
+                          </span>
+                        )}
+                        {pi === places.length - 1 && (
+                          <span style={{ fontSize: '0.72rem', color: '#9CA3AF', background: '#F9FAFB', padding: '2px 8px', borderRadius: 4 }}>
+                            도착 완료
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 설명 */}
+                      {place.description && (
+                        <div style={{ fontSize: '0.76rem', color: '#666', lineHeight: 1.55, marginTop: 6 }}>
+                          {place.description}
+                        </div>
+                      )}
+                      {place.address && (
+                        <div style={{ fontSize: '0.68rem', color: '#AAA', marginTop: 4 }}>📍 {place.address}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 이동 수단 화살표 (장소 사이) */}
+                {nextRoute && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                    margin: '2px 0',
+                  }}>
+                    <div style={{ width: 2, height: 28, background: '#E5E7EB', marginLeft: 18, flexShrink: 0, borderRadius: 1 }} />
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      background: '#F8F9FA', borderRadius: 8, padding: '5px 12px',
+                      border: '1px solid #EBEBEB', flexWrap: 'wrap',
+                    }}>
+                      <span style={{ fontSize: '0.9rem' }}>{TRANS_ICON[nextRoute.transport] ?? '➡️'}</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#555' }}>
+                        {TRANS_LABEL[nextRoute.transport]} {nextRoute.durationMinutes}분
+                      </span>
+                      {trafficBuf(nextRoute.transport, nextRoute.durationMinutes) > 0 && (
+                        <span style={{ fontSize: '0.66rem', color: '#F59E0B', background: '#FFFBEB', padding: '1px 6px', borderRadius: 3, fontWeight: 600 }}>
+                          🚗 정체 +{trafficBuf(nextRoute.transport, nextRoute.durationMinutes)}분
+                        </span>
+                      )}
+                      {nextRoute.estimatedCost > 0 && (
+                        <span style={{ fontSize: '0.68rem', color: '#888' }}>
+                          ₩{nextRoute.estimatedCost.toLocaleString()}
+                        </span>
+                      )}
+                      {nextRoute.note && (
+                        <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>· {nextRoute.note}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function addDays(date: Date, n: number) {
   const d = new Date(date)
   d.setDate(d.getDate() + n)
@@ -57,6 +297,7 @@ export default function LandingPage() {
   const [members,    setMembers]    = useState(2)
   const [dateOpen,   setDateOpen]   = useState(false)
   const [activeTab,  setActiveTab]  = useState<'해외여행'|'국내여행'>('해외여행')
+  const [previewItinerary, setPreviewItinerary] = useState<SampleItinerary | null>(null)
   const dateRef = useRef<HTMLDivElement>(null)
 
   // 날짜 패널 외부 클릭 닫기
@@ -86,6 +327,9 @@ export default function LandingPage() {
 
   return (
     <div style={{ background: '#fff' }}>
+      {previewItinerary && (
+        <SampleModal itinerary={previewItinerary} onClose={() => setPreviewItinerary(null)} />
+      )}
       <Navbar />
 
       {/* ── HERO ── */}
@@ -269,6 +513,88 @@ export default function LandingPage() {
           ))}
         </div>
       </div>
+
+      {/* ── 추천 여행일정 ── */}
+      <section style={{ padding: '56px 32px', maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.08em', marginBottom: 6, textTransform: 'uppercase' }}>추천 여행일정</div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#1A1A1A', letterSpacing: '-0.02em' }}>
+              실제 여행자 코스로 만든 <span style={{ color: 'var(--primary)' }}>베스트 일정</span>
+            </h2>
+            <p style={{ fontSize: '0.82rem', color: '#888', marginTop: 6, lineHeight: 1.5 }}>
+              실제 여행 후기와 현지 코스를 기반으로 구성한 검증된 여행 일정이에요
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+          {SAMPLE_ITINERARIES.map(it => (
+            <div key={it.id}
+              onClick={() => setPreviewItinerary(it)}
+              style={{
+                background: '#fff', borderRadius: 16, overflow: 'hidden',
+                border: '1px solid #EBEBEB', cursor: 'pointer',
+                transition: 'all 0.22s', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+              }}
+              onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = 'translateY(-6px)'; el.style.boxShadow = '0 16px 40px rgba(0,0,0,0.13)' }}
+              onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = ''; el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)' }}
+            >
+              {/* 이미지 */}
+              <div style={{ height: 180, overflow: 'hidden', position: 'relative' }}>
+                <img src={it.imageUrl} alt={it.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.05)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = '' }}
+                />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 55%)' }} />
+                {/* 나이트/데이 뱃지 */}
+                <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: '0.7rem', fontWeight: 700 }}>
+                  🗓️ {it.nights}박{it.days}일
+                </div>
+                <div style={{ position: 'absolute', top: 12, right: 12, background: 'var(--primary)', color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: '0.7rem', fontWeight: 700 }}>
+                  🇯🇵 일본
+                </div>
+                <div style={{ position: 'absolute', bottom: 12, left: 14, right: 14 }}>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.01em', lineHeight: 1.3 }}>{it.title}</div>
+                </div>
+              </div>
+
+              {/* 본문 */}
+              <div style={{ padding: '16px' }}>
+                {/* 태그 */}
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {it.tags.map(t => (
+                    <span key={t} style={{ fontSize: '0.65rem', background: '#F3F4F6', color: '#555', padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}>{t}</span>
+                  ))}
+                </div>
+
+                {/* 하이라이트 */}
+                <div style={{ fontSize: '0.75rem', color: '#555', lineHeight: 1.55, marginBottom: 12 }}>
+                  ✨ {it.highlight}
+                </div>
+
+                {/* 하단 정보 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #F5F5F5', paddingTop: 12 }}>
+                  <div style={{ fontSize: '0.7rem', color: '#999' }}>
+                    🚌 {it.transport} &nbsp;|&nbsp; {it.days}일 일정
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--primary)' }}>
+                    {it.estimatedCost}
+                  </div>
+                </div>
+
+                {/* 클릭 안내 */}
+                <div style={{ marginTop: 10, padding: '8px 12px', background: 'linear-gradient(135deg, #667EEA15, #764BA215)', borderRadius: 8, textAlign: 'center' }}>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--primary)', fontWeight: 700 }}>
+                    📋 일정 전체 보기 →
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* ── 인기 여행지 ── */}
       <section style={{ padding: '56px 32px', maxWidth: 1100, margin: '0 auto' }}>

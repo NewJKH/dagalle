@@ -549,10 +549,6 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
     places.push({ loc: r.to, arrivalTime, stayMins, idx: i })
   }
 
-  // 하루 총 CAR 이동 시간 → 주유 필요 여부 판단
-  const totalCarMins = routes.filter(r => r.transport === 'CAR').reduce((s, r) => s + r.durationMinutes, 0)
-  const needsRefuel  = totalCarMins >= 90   // 90분 이상 주행 시 주유 권장
-  const refuelWarn   = totalCarMins >= 180  // 3시간 이상이면 경고
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 28, animation: 'fadeUp 0.4s ease both' }}>
@@ -665,28 +661,7 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
           </div>
         )
       })}
-      {/* 주유 안내 배너 */}
-      {needsRefuel && (
-        <div style={{
-          marginTop: 12, padding: '12px 16px', borderRadius: 14,
-          background: refuelWarn ? 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' : 'linear-gradient(135deg, #FFFBEB, #FEF3C7)',
-          border: `1px solid ${refuelWarn ? '#FED7AA' : '#FDE68A'}`,
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: '1.3rem' }}>⛽</span>
-          <div>
-            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: refuelWarn ? '#9A3412' : '#92400E', marginBottom: 2 }}>
-              {refuelWarn ? '⚠️ 주유 필수 구간' : '주유 권장'}
-            </div>
-            <div style={{ fontSize: '0.7rem', color: refuelWarn ? '#B45309' : '#A16207' }}>
-              오늘 차량 이동 {totalCarMins}분 예정 —
-              {refuelWarn
-                ? ' 출발 전 또는 중간 경유 시 반드시 주유하세요.'
-                : ' 출발 전 연료를 확인하세요.'}
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }

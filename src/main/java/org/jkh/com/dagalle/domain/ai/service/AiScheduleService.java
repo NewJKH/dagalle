@@ -111,8 +111,8 @@ public class AiScheduleService {
         // 규칙 기반: TravelPlan 생성 (Claude 호출 없음)
         TravelPlan travel = createTravelByRule(user, req, totalDays);
 
-        // Claude 단일 호출: 전체 Day 일괄 생성
-        generateAllDays(travel, req, totalDays);
+        // Claude 1회: 1일차만 생성 (나머지는 사용자가 순서대로 생성)
+        generateDay(userId, travel.getId(), 1);
 
         log.info("[AI generate 완료] travelId={}", travel.getId());
         return TravelResponse.from(travel);

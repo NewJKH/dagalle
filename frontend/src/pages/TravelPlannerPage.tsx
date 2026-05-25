@@ -96,6 +96,23 @@ export default function TravelPlannerPage() {
       if (rRes?.data) setCarRental(rRes.data)
       if (Array.isArray(aRes?.data)) setAccomm(aRes.data)
       if (cRes?.data) setCostSummary(cRes.data)
+
+      // 아직 1일차가 없으면 자동 생성 시작
+      if (loadedDays.length === 0 && tRes?.data) {
+        setDayStatus(s => ({ ...s, 1: 'generating' }))
+        fetch(`/api/v1/travels/${tRes.data.id}/ai/day/1`, { method: 'POST', headers: h() })
+          .then(r => r.json())
+          .then(d => {
+            if (d.data) {
+              setDays([d.data])
+              setDayStatus(s => ({ ...s, 1: 'done' }))
+              setSelectedDay(1)
+            } else {
+              setDayStatus(s => ({ ...s, 1: 'error' }))
+            }
+          })
+          .catch(() => setDayStatus(s => ({ ...s, 1: 'error' })))
+      }
     }).catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps

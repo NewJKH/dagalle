@@ -235,39 +235,31 @@ function PreferenceSliders({ prefs, setPrefs }: {
   )
 }
 
-/* ── 여행 생성 모달 ── */
+/* ── 여행 생성 모달 (2단계) ── */
+const CITIES_JP = ['도쿄','오사카','교토','삿포로','후쿠오카','나고야','오키나와','나라','고베','벳푸','유후인','히로시마','가나자와','하코네','요코하마']
+const CITIES_KR = ['서울','부산','제주','강릉','경주','여수','전주','속초','통영','춘천']
+
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: TravelPlan) => void }) {
   const saved = readSearch()
   const today = new Date().toISOString().split('T')[0]
 
-  const [tab, setTab] = useState<'natural' | 'ai'>('natural')
+  // step 1: 국가/도시 선택 / step 2: 상세 설정
+  const [step, setStep] = useState<1 | 2>(1)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const [prefs, setPrefs]     = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
 
-  const [natPrefs, setNatPrefs] = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
-  const [aiPrefs, setAiPrefs]   = useState<Prefs>({ food: 5, accommodation: 5, extreme: 3, transport: 5 })
-
-  const [nat, setNat] = useState({
-    startLocation: saved.from || '인천국제공항',
-    startDate:     saved.startDate || '',
-    endDate:       saved.endDate   || '',
-    memberCount:   saved.members   || 2,
-    naturalInput:  saved.to ? `${saved.to}으로 여행 가고 싶어요. ` : '',
-  })
-
-  const [ai, setAi] = useState({
+  const [form, setForm] = useState({
+    countryCode:         'JP',
+    endLocation:         saved.to || '',
     startLocation:       saved.from || '인천국제공항',
-    endLocation:         saved.to   || '',
     startDate:           saved.startDate || '',
     endDate:             saved.endDate   || '',
-    tendency:            'BALANCED',
     memberCount:         saved.members || 2,
-    countryCode:         'JP',
+    tendency:            'BALANCED',
+    withCar:             false,
     keywords:            [] as string[],
     keywordInput:        '',
-    theme:               '',
-    withCar:             false,
-    budgetTotal:         '',
     departureFlightTime: '',
     arrivalAtDestTime:   '',
     returnFlightTime:    '',
@@ -279,291 +271,213 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     fontSize: '0.88rem', color: '#1A1A1A', background: '#fff', transition: 'border-color 0.15s',
   }
 
-  const handleNaturalSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!nat.naturalInput.trim()) { setError('여행 설명을 입력해주세요.'); return }
-    if (!nat.startDate || !nat.endDate) { setError('날짜를 입력해주세요.'); return }
-    setLoading(true); setError('')
-    const token = localStorage.getItem('accessToken') || ''
-    try {
-      const res = await fetch('/api/v1/travels/ai/init/natural', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          startLocation: nat.startLocation,
-          startDate: nat.startDate,
-          endDate: nat.endDate,
-          memberCount: nat.memberCount,
-          naturalInput: nat.naturalInput.trim(),
-          foodScore: natPrefs.food,
-          accommodationScore: natPrefs.accommodation,
-          extremeScore: natPrefs.extreme,
-          transportScore: natPrefs.transport,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
-      else setError(data.message || 'AI 여행 생성에 실패했습니다.')
-    } catch { setError('서버에 연결할 수 없습니다.') }
-    finally { setLoading(false) }
-  }
-
-  const handleAiSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!ai.endLocation) { setError('여행지를 입력해주세요.'); return }
+    if (!form.endLocation) { setError('여행지를 선택해주세요.'); return }
+    if (!form.startDate || !form.endDate) { setError('날짜를 입력해주세요.'); return }
     setLoading(true); setError('')
     const token = localStorage.getItem('accessToken') || ''
     try {
       const res = await fetch('/api/v1/travels/ai/init', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          ...ai,
-          theme: ai.theme || null,
-          budgetTotal: ai.budgetTotal ? Number(ai.budgetTotal) : null,
-          departureFlightTime: ai.departureFlightTime || null,
-          arrivalAtDestTime: ai.arrivalAtDestTime || null,
-          returnFlightTime: ai.returnFlightTime || null,
-          foodScore: aiPrefs.food,
-          accommodationScore: aiPrefs.accommodation,
-          extremeScore: aiPrefs.extreme,
-          transportScore: aiPrefs.transport,
+          countryCode:         form.countryCode,
+          startLocation:       form.startLocation,
+          endLocation:         form.endLocation,
+          startDate:           form.startDate,
+          endDate:             form.endDate,
+          memberCount:         form.memberCount,
+          tendency:            form.tendency,
+          withCar:             form.withCar,
+          keywords:            form.keywords,
+          departureFlightTime: form.departureFlightTime || null,
+          arrivalAtDestTime:   form.arrivalAtDestTime   || null,
+          returnFlightTime:    form.returnFlightTime     || null,
+          foodScore:           prefs.food,
+          accommodationScore:  prefs.accommodation,
+          extremeScore:        prefs.extreme,
+          transportScore:      prefs.transport,
         }),
       })
       const data = await res.json()
       if (res.ok && data.data) { sessionStorage.removeItem(SEARCH_KEY); onCreated({ ...data.data, totalEstimatedCost: 0 } as TravelPlan) }
-      else setError(data.message || 'AI 일정 생성에 실패했습니다.')
+      else setError(data.message || '생성에 실패했습니다.')
     } catch { setError('서버에 연결할 수 없습니다.') }
     finally { setLoading(false) }
   }
 
+  const cities = form.countryCode === 'JP' ? CITIES_JP : CITIES_KR
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: '32px 32px 28px', width: '100%', maxWidth: 520, boxShadow: '0 24px 64px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#1A1A1A' }}>새 여행 만들기</h2>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, marginBottom: 24, border: '1px solid #E0E0E0', borderRadius: 10, overflow: 'hidden' }}>
-          {([['natural', '💬 자유 입력'], ['ai', '✨ AI 상세 설정']] as const).map(([t, label], i) => (
-            <button key={t} onClick={() => { setTab(t); setError('') }} style={{
-              flex: 1, padding: '11px', fontSize: '0.82rem', fontWeight: 700, border: 'none', cursor: 'pointer',
-              background: tab === t ? 'var(--primary)' : '#FAFAFA',
-              color: tab === t ? '#fff' : '#888',
-              borderRight: i === 0 ? '1px solid #E0E0E0' : 'none',
-              transition: 'all 0.15s',
-            }}>{label}</button>
-          ))}
-        </div>
-
-        {error && (
-          <div style={{ background: '#FFF3F1', border: '1px solid #FFBDB5', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 500 }}>
-            ⚠️ {error}
+      {/* ── Step 1: 국가 + 도시 선택 ── */}
+      {step === 1 && (
+        <div style={{ background: '#fff', borderRadius: 24, padding: '28px 28px 24px', width: '100%', maxWidth: 420, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1A1A1A' }}>어디로 가고 싶으세요?</h2>
+              <p style={{ fontSize: '0.78rem', color: '#999', marginTop: 3 }}>나라와 도시를 골라주세요</p>
+            </div>
+            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#888' }}>✕</button>
           </div>
-        )}
 
-        {/* ── 자유 입력 탭 ── */}
-        {tab === 'natural' && (
-          <form onSubmit={handleNaturalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ background: '#F8FFF8', border: '1px solid #C8F0D0', borderRadius: 10, padding: '12px 14px', fontSize: '0.8rem', color: '#2D6A4F', lineHeight: 1.6 }}>
-              💬 가고 싶은 여행을 자유롭게 설명하면 AI가 모든 것을 알아서 만들어줘요
-            </div>
+          {/* 국가 탭 */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {[{ code:'JP', flag:'🇯🇵', label:'일본' },{ code:'KR', flag:'🇰🇷', label:'국내' }].map(c => (
+              <button key={c.code} type="button"
+                onClick={() => setForm(f => ({ ...f, countryCode: c.code, endLocation: '' }))}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 12, cursor: 'pointer', fontWeight: 800, fontSize: '0.95rem',
+                  border: form.countryCode === c.code ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
+                  background: form.countryCode === c.code ? '#FFF3F1' : '#FAFAFA',
+                  color: form.countryCode === c.code ? 'var(--primary)' : '#666', transition: 'all 0.15s',
+                }}>{c.flag} {c.label}</button>
+            ))}
+          </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발지</label>
-              <AutocompleteInput value={nat.startLocation} onChange={v => setNat(f => ({...f, startLocation: v}))} options={DEPARTURE_OPTIONS} placeholder="인천국제공항" required />
-            </div>
+          {/* 도시 그리드 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
+            {cities.map(city => {
+              const sel = form.endLocation === city
+              return (
+                <button key={city} type="button"
+                  onClick={() => setForm(f => ({ ...f, endLocation: city }))}
+                  style={{
+                    padding: '10px 6px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem',
+                    border: sel ? '2px solid var(--primary)' : '1.5px solid #EBEBEB',
+                    background: sel ? '#FFF3F1' : '#FAFAFA',
+                    color: sel ? 'var(--primary)' : '#444', transition: 'all 0.12s',
+                  }}>{DEST_EMOJI[city] ?? '📍'} {city}</button>
+              )
+            })}
+          </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
-                <input
-                  type="date" value={nat.startDate} required min={today}
-                  onChange={e => {
-                    const d = e.target.value
-                    setNat(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate }))
-                  }}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
-                <input
-                  type="date" value={nat.endDate} required min={nat.startDate || today}
-                  onChange={e => setNat(f => ({...f, endDate: e.target.value}))}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>인원 수</label>
-              <select value={nat.memberCount} onChange={e => setNat(f => ({...f, memberCount: Number(e.target.value)}))} style={{ ...inputSt, cursor: 'pointer' }}>
-                {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}명{n===1?' (혼자)':n===2?' (커플)':''}</option>)}
-              </select>
-            </div>
-
-            <PreferenceSliders prefs={natPrefs} setPrefs={setNatPrefs} />
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>
-                여행 설명 <span style={{ fontWeight: 400, color: '#BBB' }}>({nat.naturalInput.length}/300)</span>
-              </label>
-              <textarea
-                placeholder="예) 후쿠오카 도착 후 벳푸 온천 여행하고 싶어요. 렌트카 없이 대중교통으로, 현지 라멘과 료칸 숙박이 있으면 좋겠어요."
-                value={nat.naturalInput}
-                onChange={e => setNat(f => ({...f, naturalInput: e.target.value.slice(0, 300)}))}
-                rows={4}
-                style={{ ...inputSt, resize: 'vertical', minHeight: 100, lineHeight: 1.6, fontFamily: 'inherit' }}
-                onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
-              />
-            </div>
-
-            <button type="submit" disabled={loading} style={{
-              padding: '13px', borderRadius: 10, fontSize: '0.92rem', fontWeight: 800,
-              background: loading ? '#E0E0E0' : 'var(--primary)', color: '#fff', border: 'none',
-              boxShadow: loading ? 'none' : '0 3px 12px rgba(255,86,64,0.35)',
-              cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          <button
+            disabled={!form.endLocation}
+            onClick={() => { if (form.endLocation) setStep(2) }}
+            style={{
+              width: '100%', padding: '13px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
+              background: form.endLocation ? 'var(--primary)' : '#E0E0E0',
+              color: '#fff', border: 'none',
+              boxShadow: form.endLocation ? '0 4px 14px rgba(255,86,64,0.35)' : 'none',
+              cursor: form.endLocation ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
             }}>
-              {loading ? <><span style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> AI가 구성 중... (약 30초)</> : '✈️ AI 여행 일정 생성'}
-            </button>
-          </form>
-        )}
+            {form.endLocation ? `${DEST_EMOJI[form.endLocation] ?? '✈️'} ${form.endLocation} 선택 →` : '도시를 선택하세요'}
+          </button>
+        </div>
+      )}
 
-        {/* ── AI 상세 탭 ── */}
-        {tab === 'ai' && (
-          <form onSubmit={handleAiSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* ── Step 2: 상세 설정 ── */}
+      {step === 2 && (
+        <div style={{ background: '#fff', borderRadius: 20, padding: '28px 28px 24px', width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <button onClick={() => setStep(1)} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#666' }}>←</button>
+            <div style={{ flex: 1 }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#1A1A1A' }}>
+                {DEST_EMOJI[form.endLocation] ?? '✈️'} {form.endLocation} 여행 설정
+              </h2>
+            </div>
+            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#888' }}>✕</button>
+          </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>여행 국가</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {[{ code:'JP', flag:'🇯🇵', label:'일본' },{ code:'KR', flag:'🇰🇷', label:'국내' }].map(c => (
-                  <button key={c.code} type="button" onClick={() => setAi(f => ({...f, countryCode: c.code}))} style={{
-                    flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
-                    border: ai.countryCode === c.code ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
-                    background: ai.countryCode === c.code ? '#FFF3F1' : '#fff',
-                    color: ai.countryCode === c.code ? 'var(--primary)' : '#666', transition: 'all 0.15s',
-                  }}>{c.flag} {c.label}</button>
-                ))}
+          {error && (
+            <div style={{ background: '#FFF3F1', border: '1px solid #FFBDB5', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 500 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
+                <input type="date" value={form.startDate} required min={today}
+                  onChange={e => { const d = e.target.value; setForm(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate })) }}
+                  style={inputSt} onFocus={e => (e.target.style.borderColor='var(--primary)')} onBlur={e => (e.target.style.borderColor='#E0E0E0')} />
               </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발지</label>
-              <AutocompleteInput value={ai.startLocation} onChange={v => setAi(f => ({...f, startLocation: v}))} options={DEPARTURE_OPTIONS} placeholder="인천국제공항..." required />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>여행지</label>
-              <AutocompleteInput value={ai.endLocation} onChange={v => setAi(f => ({...f, endLocation: v}))}
-                options={ai.countryCode === 'JP' ? DEST_JP : DEST_KR}
-                placeholder={ai.countryCode === 'JP' ? '도쿄, 오사카, 삿포로...' : '부산, 제주, 강릉...'} required />
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
+                <input type="date" value={form.endDate} required min={form.startDate || today}
+                  onChange={e => setForm(f => ({...f, endDate: e.target.value}))}
+                  style={inputSt} onFocus={e => (e.target.style.borderColor='var(--primary)')} onBlur={e => (e.target.style.borderColor='#E0E0E0')} />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>출발일</label>
-                <input
-                  type="date" value={ai.startDate} required min={today}
-                  onChange={e => {
-                    const d = e.target.value
-                    setAi(f => ({ ...f, startDate: d, endDate: f.endDate && f.endDate < d ? '' : f.endDate }))
-                  }}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
-                />
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>인원</label>
+                <select value={form.memberCount} onChange={e => setForm(f => ({...f, memberCount: Number(e.target.value)}))} style={{ ...inputSt, cursor: 'pointer' }}>
+                  {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}명{n===1?' (혼자)':n===2?' (커플)':''}</option>)}
+                </select>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>귀국일</label>
-                <input
-                  type="date" value={ai.endDate} required min={ai.startDate || today}
-                  onChange={e => setAi(f => ({...f, endDate: e.target.value}))}
-                  style={inputSt}
-                  onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                  onBlur={e => (e.target.style.borderColor = '#E0E0E0')}
-                />
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>이동 수단</label>
+                <div style={{ display: 'flex', gap: 6, height: 44 }}>
+                  {[{ val: false, label: '🚌 대중교통' }, { val: true, label: '🚗 렌트카' }].map(o => (
+                    <button key={String(o.val)} type="button" onClick={() => setForm(f => ({...f, withCar: o.val}))} style={{
+                      flex: 1, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem',
+                      border: form.withCar === o.val ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
+                      background: form.withCar === o.val ? '#FFF3F1' : '#fff',
+                      color: form.withCar === o.val ? 'var(--primary)' : '#666',
+                    }}>{o.label}</button>
+                  ))}
+                </div>
               </div>
             </div>
 
+            {/* 여행 스타일 */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>인원 수</label>
-              <select value={ai.memberCount} onChange={e => setAi(f => ({...f, memberCount: Number(e.target.value)}))} style={{ ...inputSt, cursor: 'pointer' }}>
-                {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}명{n===1?' (혼자)':n===2?' (커플)':''}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>여행 스타일</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>여행 스타일</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {TENDENCY_OPTIONS.map(opt => (
-                  <button key={opt.value} type="button" onClick={() => setAi(f => ({...f, tendency: opt.value}))} style={{
-                    padding: '12px 8px', borderRadius: 10, cursor: 'pointer', textAlign: 'center',
-                    border: ai.tendency === opt.value ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
-                    background: ai.tendency === opt.value ? '#FFF3F1' : '#fff',
-                    color: ai.tendency === opt.value ? 'var(--primary)' : '#666', transition: 'all 0.15s',
+                  <button key={opt.value} type="button" onClick={() => setForm(f => ({...f, tendency: opt.value}))} style={{
+                    padding: '10px 6px', borderRadius: 10, cursor: 'pointer', textAlign: 'center',
+                    border: form.tendency === opt.value ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
+                    background: form.tendency === opt.value ? '#FFF3F1' : '#fff',
+                    color: form.tendency === opt.value ? 'var(--primary)' : '#666',
                   }}>
-                    <div style={{ fontSize: '1.2rem', marginBottom: 4 }}>{opt.icon}</div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: 2 }}>{opt.label}</div>
-                    <div style={{ fontSize: '0.62rem', color: '#999', lineHeight: 1.3 }}>{opt.desc}</div>
+                    <div style={{ fontSize: '1.1rem', marginBottom: 3 }}>{opt.icon}</div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700 }}>{opt.label}</div>
+                    <div style={{ fontSize: '0.58rem', color: '#999', lineHeight: 1.3, marginTop: 2 }}>{opt.desc}</div>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 8 }}>이동 수단</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {[{ val: false, label: '🚌 대중교통' }, { val: true, label: '🚗 렌트카' }].map(o => (
-                  <button key={String(o.val)} type="button" onClick={() => setAi(f => ({...f, withCar: o.val}))} style={{
-                    flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
-                    border: ai.withCar === o.val ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
-                    background: ai.withCar === o.val ? '#FFF3F1' : '#fff',
-                    color: ai.withCar === o.val ? 'var(--primary)' : '#666', transition: 'all 0.15s',
-                  }}>{o.label}</button>
-                ))}
-              </div>
-            </div>
+            <PreferenceSliders prefs={prefs} setPrefs={setPrefs} />
 
-            <PreferenceSliders prefs={aiPrefs} setPrefs={setAiPrefs} />
-
+            {/* 키워드 */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>키워드 <span style={{ fontWeight: 400, color: '#BBB' }}>(Enter로 추가)</span></label>
-              {ai.keywords.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                  {ai.keywords.map(kw => (
-                    <span key={kw} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: '#FFF3F1', color: 'var(--primary)', fontSize: '0.78rem', fontWeight: 600 }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#333', marginBottom: 6 }}>키워드 <span style={{ fontWeight: 400, color: '#BBB' }}>(Enter로 추가)</span></label>
+              {form.keywords.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7 }}>
+                  {form.keywords.map(kw => (
+                    <span key={kw} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, background: '#FFF3F1', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 600 }}>
                       {kw}
-                      <button type="button" onClick={() => setAi(f => ({...f, keywords: f.keywords.filter(k => k !== kw)}))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', padding: 0, fontSize: '0.9rem' }}>×</button>
+                      <button type="button" onClick={() => setForm(f => ({...f, keywords: f.keywords.filter(k => k !== kw)}))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', padding: 0 }}>×</button>
                     </span>
                   ))}
                 </div>
               )}
-              <input placeholder="야키니꾸, 스시, 온천..."
-                value={ai.keywordInput} onChange={e => setAi(f => ({...f, keywordInput: e.target.value}))}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const kw = ai.keywordInput.trim(); if (kw && !ai.keywords.includes(kw)) setAi(f => ({...f, keywords: [...f.keywords, kw], keywordInput: ''})) }}}
-                style={inputSt}
-                onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+              <input placeholder="온천, 라멘, 야경..."
+                value={form.keywordInput} onChange={e => setForm(f => ({...f, keywordInput: e.target.value}))}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const kw = form.keywordInput.trim(); if (kw && !form.keywords.includes(kw)) setForm(f => ({...f, keywords: [...f.keywords, kw], keywordInput: ''})) }}}
+                style={inputSt} onFocus={e => (e.target.style.borderColor='var(--primary)')} onBlur={e => (e.target.style.borderColor='#E0E0E0')} />
             </div>
 
-            <div style={{ background: '#F8F8F8', borderRadius: 10, padding: '14px', border: '1px solid #EBEBEB' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#555', marginBottom: 10 }}>✈️ 항공편 시간 <span style={{ fontWeight: 400, color: '#BBB' }}>(선택)</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {/* 항공편 */}
+            <div style={{ background: '#F8F8F8', borderRadius: 10, padding: '12px 14px', border: '1px solid #EBEBEB' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#555', marginBottom: 8 }}>✈️ 항공편 시간 <span style={{ fontWeight: 400, color: '#BBB' }}>(선택)</span></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                 {[['출국 출발','departureFlightTime'],['현지 도착','arrivalAtDestTime'],['귀국 출발','returnFlightTime']].map(([label, key]) => (
                   <div key={key}>
-                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: '#777', marginBottom: 4 }}>{label}</label>
-                    <input type="time" value={ai[key as keyof typeof ai] as string} onChange={e => setAi(f => ({...f, [key]: e.target.value}))}
-                      style={{ ...inputSt, fontSize: '0.82rem', padding: '8px 10px' }}
-                      onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
-                      onBlur={e => (e.target.style.borderColor = '#E0E0E0')} />
+                    <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 600, color: '#777', marginBottom: 4 }}>{label}</label>
+                    <input type="time" value={form[key as keyof typeof form] as string}
+                      onChange={e => setForm(f => ({...f, [key]: e.target.value}))}
+                      style={{ ...inputSt, fontSize: '0.8rem', padding: '7px 8px' }}
+                      onFocus={e => (e.target.style.borderColor='var(--primary)')} onBlur={e => (e.target.style.borderColor='#E0E0E0')} />
                   </div>
                 ))}
               </div>
@@ -576,11 +490,13 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}>
-              {loading ? <><span style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> AI가 일정 만드는 중... (약 30초)</> : `✨ AI 일정 생성 ${ai.withCar ? '🚗' : '🚌'}`}
+              {loading
+                ? <><span style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> 여행 만드는 중...</>
+                : `✨ ${form.endLocation} 여행 만들기`}
             </button>
           </form>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import MapView from '../components/MapView'
@@ -51,6 +51,8 @@ export default function TravelPlannerPage() {
   // 지도 탭을 처음 열었을 때만 MapView 마운트 (display:none 상태에서 Google Maps 초기화 방지)
   const [mapEverShown, setMapEverShown] = useState(false)
 
+  const autoGenTriggered = useRef(false)  // StrictMode 이중 호출 방지
+
   const token = () => localStorage.getItem('accessToken') || ''
   const h = () => ({ Authorization: `Bearer ${token()}` })
 
@@ -97,8 +99,9 @@ export default function TravelPlannerPage() {
       if (Array.isArray(aRes?.data)) setAccomm(aRes.data)
       if (cRes?.data) setCostSummary(cRes.data)
 
-      // 아직 1일차가 없으면 자동 생성 시작
-      if (loadedDays.length === 0 && tRes?.data) {
+      // 아직 1일차가 없으면 자동 생성 시작 (StrictMode 이중 호출 방지)
+      if (loadedDays.length === 0 && tRes?.data && !autoGenTriggered.current) {
+        autoGenTriggered.current = true
         setDayStatus(s => ({ ...s, 1: 'generating' }))
         fetch(`/api/v1/travels/${tRes.data.id}/ai/day/1`, { method: 'POST', headers: h() })
           .then(r => r.json())

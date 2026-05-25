@@ -40,16 +40,26 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+/**
+ * AI 여행 일정 생성 서비스.
+ *
+ * ── Claude API 호출 정책 ─────────────────────────────────
+ * ① generateSchedule / initFromNaturalInput  → 1회 (전체 Day 일괄 생성)
+ * ② generateDay (단건 재생성, 사용자 요청 시)  → 1회
+ * ③ fillFreeTime (빈 시간 채우기, 사용자 요청)  → 1회
+ *
+ * 스켈레톤(제목·렌트카·숙박) 및 자연어 파싱은 규칙 기반으로 처리하여
+ * 불필요한 Claude 호출을 제거했습니다.
+ * ─────────────────────────────────────────────────────────
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -71,30 +81,160 @@ public class AiScheduleService {
     private final GooglePlacesClient googlePlacesClient;
 
     // ──────────────────────────────────────────────
-    //  Phase 1: 스켈레톤 초기화 (제목 + 렌트카 + 숙박)
-    //  프론트에서 호출 → travelId 받아서 Day별 생성 시작
+    //  Day 전체 스키마 (단일 Claude 호출용)
+    // ──────────────────────────────────────────────
+
+    private static final String DAY_SCHEMA =
+            "{\"dayNumber\":숫자,\"date\":\"YYYY-MM-DD\",\"routes\":[{" +
+            "\"fromLocation\":{\"name\":\"장소명\",\"address\":\"주소\",\"lat\":위도,\"lng\":경도," +
+            "\"type\":\"RESTAURANT|CAFE|HOTEL|STATION|AIRPORT|SHOPPING|MUSEUM|PARK|ETC\",\"description\":\"설명\"}," +
+            "\"toLocation\":{...}," +
+            "\"transport\":\"CAR|WALK|SUBWAY|BUS|TRAIN\"," +
+            "\"departureTime\":\"HH:mm\",\"durationMinutes\":숫자,\"estimatedCost\":숫자,\"note\":\"설명\"}]}";
+
+    // ──────────────────────────────────────────────
+    //  ① 전체 일정 생성 (Claude 1회 호출)
+    //     - 스켈레톤(제목·렌트카·숙박)은 규칙 기반
+    //     - 모든 Day를 단일 Claude 호출로 생성
+    // ──────────────────────────────────────────────
+
+    @Transactional
+    public TravelResponse generateSchedule(Long userId, AiGenerateRequest req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        int totalDays = (int) daysBetween(req.getStartDate(), req.getEndDate());
+        log.info("[AI generate] userId={}, {}→{}, {}~{} ({}일)",
+                userId, req.getStartLocation(), req.getEndLocation(),
+                req.getStartDate(), req.getEndDate(), totalDays);
+
+        // 규칙 기반: TravelPlan 생성 (Claude 호출 없음)
+        TravelPlan travel = createTravelByRule(user, req, totalDays);
+
+        // Claude 단일 호출: 전체 Day 일괄 생성
+        generateAllDays(travel, req, totalDays);
+
+        log.info("[AI generate 완료] travelId={}", travel.getId());
+        return TravelResponse.from(travel);
+    }
+
+    // ──────────────────────────────────────────────
+    //  ② 자유 입력 → 규칙 파싱 → generateSchedule
+    //     - 도시명 찾으면 Claude 파싱 호출 없음
+    //     - 도시명 못 찾을 때만 Claude 1회 fallback
+    // ──────────────────────────────────────────────
+
+    @Transactional
+    public TravelResponse initFromNaturalInput(Long userId, AiNaturalRequest req) {
+        log.info("[AI natural] userId={}, input='{}'", userId, req.getNaturalInput());
+
+        AiGenerateRequest structuredReq = parseNaturalByRules(req);
+
+        // 규칙으로 여행지를 특정하지 못한 경우에만 Claude fallback
+        if (structuredReq.getEndLocation() == null || structuredReq.getEndLocation().isBlank()) {
+            log.info("[AI natural] 도시명 미감지 → Claude 파싱 fallback");
+            structuredReq = parseNaturalByAi(req);
+        } else {
+            log.info("[AI natural] 규칙 파싱 성공: 여행지={}, 국가={}, 렌트카={}",
+                    structuredReq.getEndLocation(), structuredReq.getCountryCode(), structuredReq.isWithCar());
+        }
+
+        return generateSchedule(userId, structuredReq);
+    }
+
+    // ──────────────────────────────────────────────
+    //  ③ initSchedule: 스켈레톤만 (Claude 호출 없음)
+    //     프론트에서 travelId 먼저 받고 Day별 생성할 때 사용
     // ──────────────────────────────────────────────
 
     @Transactional
     public TravelResponse initSchedule(Long userId, AiGenerateRequest req) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
         int totalDays = (int) daysBetween(req.getStartDate(), req.getEndDate());
-        log.info("[AI init] userId={}, {}→{}, {}~{} ({}일)", userId,
-                req.getStartLocation(), req.getEndLocation(), req.getStartDate(), req.getEndDate(), totalDays);
+        TravelPlan travel = createTravelByRule(user, req, totalDays);
+        log.info("[AI init] 규칙 기반 완료, travelId={}", travel.getId());
+        return TravelResponse.from(travel);
+    }
 
-        // 스켈레톤 생성
-        String skeletonRaw = claudeApiClient.chat(
-                buildSkeletonSystemPrompt(req.getCountryCode()),
-                buildSkeletonUserMessage(req, totalDays));
-        log.debug("[AI skeleton 응답] {}", skeletonRaw);
-        JsonNode skeleton = parseJson(skeletonRaw);
+    // ──────────────────────────────────────────────
+    //  ④ Day 단건 생성 / 재생성 (Claude 1회)
+    //     사용자가 특정 Day만 재생성할 때 사용
+    // ──────────────────────────────────────────────
 
-        String title = skeleton.path("title").asText(req.getEndLocation() + " " + totalDays + "일 여행");
+    @Transactional
+    public PlanDayResponse generateDay(Long userId, Long travelId, int dayNumber) {
+        TravelPlan travel = getAccessibleTravel(userId, travelId);
+        int totalDays = (int) daysBetween(travel.getStartDate(), travel.getEndDate());
+        LocalDate date = travel.getStartDate().plusDays(dayNumber - 1);
+
+        planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
+                .ifPresent(planDayRepository::delete);
+        planDayRepository.flush();
+
+        log.info("[AI generateDay] travelId={}, day={}/{}", travelId, dayNumber, totalDays);
+
+        String prevLastLocation = resolvePrevLastLocation(travel, dayNumber);
+        String accommodationHint = accommodationRepository.findByTravelPlan(travel).stream()
+                .map(a -> a.getHotelName() + "(" + a.getCheckIn() + "~" + a.getCheckOut() + ")")
+                .reduce("", (a, b) -> a + b + " ");
+        String flightHint = buildFlightHint(travel, dayNumber, totalDays);
+
+        String dayRaw = claudeApiClient.chat(
+                buildDaySystemPrompt(travel.getCountryCode(),
+                        travel.getFoodScore(), travel.getAccommodationScore(),
+                        travel.getExtremeScore(), travel.getTransportScore()),
+                buildDayUserMessage(travel, dayNumber, totalDays, date,
+                        prevLastLocation, accommodationHint.trim(), flightHint));
+        log.debug("[AI day{} 응답] {}", dayNumber, dayRaw);
+
+        JsonNode dayNode = parseJson(dayRaw);
+        savePlanDay(travel, dayNode, dayNumber, date);
+
+        entityManager.flush();
+        entityManager.clear();
+        TravelPlan travelFresh = travelPlanRepository.findById(travelId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
+        return planDayRepository.findByTravelPlanAndDayNumber(travelFresh, dayNumber)
+                .map(PlanDayResponse::from)
+                .orElseThrow(() -> new IllegalStateException("Day 저장 후 조회 실패: day=" + dayNumber));
+    }
+
+    // ──────────────────────────────────────────────
+    //  ⑤ 빈 시간 채우기 (Claude 1회, 사용자 요청 시)
+    // ──────────────────────────────────────────────
+
+    public List<Map<String, Object>> fillFreeTime(Long userId, Long travelId,
+                                                   Integer dayNumber, AiFillRequest req) {
+        log.info("[AI fillFreeTime] travelId={}, day={}", travelId, dayNumber);
+        String raw = claudeApiClient.chat(buildFillSystemPrompt(), buildFillUserMessage(req));
+        JsonNode recs = parseJson(raw);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (JsonNode place : recs.path("places")) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("name",        place.path("name").asText());
+            item.put("address",     place.path("address").asText());
+            item.put("lat",         place.path("lat").asDouble());
+            item.put("lng",         place.path("lng").asDouble());
+            item.put("type",        place.path("type").asText());
+            item.put("description", place.path("description").asText());
+            item.put("stayMinutes", place.path("stayMinutes").asInt(60));
+            result.add(item);
+        }
+        return result;
+    }
+
+    // ══════════════════════════════════════════════
+    //  규칙 기반 여행 생성 (Claude 호출 없음)
+    // ══════════════════════════════════════════════
+
+    /**
+     * Claude 호출 없이 TravelPlan + 렌트카 + 숙박을 규칙으로 생성.
+     */
+    private TravelPlan createTravelByRule(User user, AiGenerateRequest req, int totalDays) {
+        String title = buildTitleByRule(req.getEndLocation(), totalDays, req.getTheme());
         String keywords = String.join(",", req.getKeywords());
 
-        // TravelPlan 저장 (Day는 아직 없음)
         TravelPlan travel = TravelPlan.builder()
                 .owner(user)
                 .title(title)
@@ -122,205 +262,446 @@ public class AiScheduleService {
         travelMemberRepository.save(TravelMember.builder()
                 .travelPlan(travel).user(user).role(MemberRole.OWNER).build());
 
-        // 렌트카 저장
-        JsonNode rentalNode = skeleton.path("rentalCar");
-        if (req.isWithCar() && !rentalNode.isMissingNode() && !rentalNode.isNull()) {
-            carRentalRepository.save(CarRental.builder()
-                    .travelPlan(travel)
-                    .carType(rentalNode.path("carType").asText(null))
-                    .dailyRateKrw(nodeIntOrNull(rentalNode, "dailyRateKrw"))
-                    .rentalDays(nodeIntOrNull(rentalNode, "rentalDays"))
-                    .estimatedFuelKrw(nodeIntOrNull(rentalNode, "estimatedFuelKrw"))
-                    .estimatedTollKrw(nodeIntOrNull(rentalNode, "estimatedTollKrw"))
-                    .build());
-            log.info("[AI 렌트카 저장] {}", rentalNode.path("carType").asText());
+        // 렌트카: 규칙 기반 단가 저장
+        if (req.isWithCar()) {
+            saveRentalCarByRule(travel, req.getCountryCode(), totalDays);
         }
 
-        // 숙박 저장
-        JsonNode accsNode = skeleton.path("accommodations");
-        if (accsNode.isArray()) {
-            for (JsonNode accNode : accsNode) {
-                try {
-                    accommodationRepository.save(Accommodation.builder()
-                            .travelPlan(travel)
-                            .hotelName(accNode.path("hotelName").asText("추천 숙소"))
-                            .checkIn(LocalDate.parse(accNode.path("checkIn").asText()))
-                            .checkOut(LocalDate.parse(accNode.path("checkOut").asText()))
-                            .pricePerNightKrw(nodeIntOrNull(accNode, "pricePerNightKrw"))
-                            .build());
-                    log.info("[AI 숙박 저장] {}", accNode.path("hotelName").asText());
-                } catch (Exception e) { log.warn("[AI 숙박 파싱 실패] {}", accNode); }
+        // 숙박: 점수 기반 등급/단가 저장
+        saveAccommodationByRule(travel, req.getCountryCode(), req.getAccommodationScore(),
+                req.getStartDate(), req.getEndDate(), req.getEndLocation());
+
+        log.info("[규칙] TravelPlan 생성 완료: title={}, travelId={}", title, travel.getId());
+        return travel;
+    }
+
+    /** 제목 규칙: "[여행지] [테마] [N]일" */
+    private String buildTitleByRule(String endLocation, int totalDays, String theme) {
+        if (theme != null && !theme.isBlank()) {
+            return endLocation + " " + theme + " " + totalDays + "일";
+        }
+        return endLocation + " " + totalDays + "일 여행";
+    }
+
+    /** 렌트카 단가 규칙 테이블 (Claude 없이 저장) */
+    private void saveRentalCarByRule(TravelPlan travel, String countryCode, int totalDays) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        int dailyRate      = isJp ? 70_000 : 80_000;   // 엔→원 환산 or 원
+        int fuelPerDay     = isJp ? 18_000 : 30_000;
+        int tollPerDay     = isJp ?  5_000 : 10_000;
+        String carType     = isJp ? "경차/하이브리드" : "중형차";
+
+        carRentalRepository.save(CarRental.builder()
+                .travelPlan(travel)
+                .carType(carType)
+                .dailyRateKrw(dailyRate)
+                .rentalDays(totalDays)
+                .estimatedFuelKrw(fuelPerDay * totalDays)
+                .estimatedTollKrw(tollPerDay * totalDays)
+                .build());
+        log.info("[규칙] 렌트카 저장: {}원/일 × {}일", dailyRate, totalDays);
+    }
+
+    /** 숙박 등급 → 단가 규칙 테이블 (Claude 없이 저장) */
+    private void saveAccommodationByRule(TravelPlan travel, String countryCode,
+                                         int accScore, LocalDate checkIn, LocalDate checkOut,
+                                         String location) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        int pricePerNight;
+        String type;
+
+        if (isJp) {
+            if      (accScore >= 9) { pricePerNight = 270_000; type = "최고급 료칸/5성급 호텔"; }
+            else if (accScore >= 7) { pricePerNight = 180_000; type = "고급 호텔/부티크 료칸"; }
+            else if (accScore >= 4) { pricePerNight = 110_000; type = "비즈니스 호텔"; }
+            else if (accScore >= 2) { pricePerNight =  54_000; type = "저가 비즈니스/게스트하우스"; }
+            else                    { pricePerNight =  27_000; type = "캡슐호텔/도미토리"; }
+        } else {
+            if      (accScore >= 9) { pricePerNight = 350_000; type = "최고급 호텔/리조트"; }
+            else if (accScore >= 7) { pricePerNight = 200_000; type = "고급 호텔"; }
+            else if (accScore >= 4) { pricePerNight = 120_000; type = "일반 호텔"; }
+            else if (accScore >= 2) { pricePerNight =  60_000; type = "모텔/게스트하우스"; }
+            else                    { pricePerNight =  30_000; type = "저가 게스트하우스/도미토리"; }
+        }
+
+        accommodationRepository.save(Accommodation.builder()
+                .travelPlan(travel)
+                .hotelName(location + " " + type)
+                .checkIn(checkIn)
+                .checkOut(checkOut)
+                .pricePerNightKrw(pricePerNight)
+                .build());
+        log.info("[규칙] 숙박 저장: {} ({}원/박)", type, pricePerNight);
+    }
+
+    // ══════════════════════════════════════════════
+    //  규칙 기반 자연어 파싱 (Claude 호출 없음)
+    // ══════════════════════════════════════════════
+
+    /**
+     * 키워드 매칭으로 여행지·국가·렌트카·성향·키워드를 추출.
+     * endLocation == null 이면 호출자가 Claude fallback을 사용해야 함.
+     */
+    private AiGenerateRequest parseNaturalByRules(AiNaturalRequest req) {
+        String input = req.getNaturalInput().toLowerCase();
+
+        // ── 도시·국가 탐색 ─────────────────────────────
+        String endLocation = null;
+        String countryCode = "JP"; // 기본값
+
+        outer:
+        for (Map.Entry<String, String[]> entry : buildCityDictionary().entrySet()) {
+            for (String city : entry.getValue()) {
+                if (input.contains(city)) {
+                    endLocation = city;
+                    countryCode = entry.getKey();
+                    break outer;
+                }
             }
         }
 
-        log.info("[AI init 완료] travelId={}, title={}", travel.getId(), title);
-        return TravelResponse.from(travel);
+        // ── 렌트카 ────────────────────────────────────
+        boolean withCar = containsAny(input, "렌트카", "렌터카", "자차", "드라이브", "자동차로");
+
+        // ── 여행 성향 ──────────────────────────────────
+        Tendency tendency = Tendency.BALANCED;
+        if (containsAny(input, "여유", "힐링", "천천히", "느긋", "쉬엄", "편하게")) {
+            tendency = Tendency.RELAX;
+        } else if (containsAny(input, "빡빡", "알차게", "최대한", "많이 보", "빼곡", "바쁘게")) {
+            tendency = Tendency.ACTIVE;
+        }
+
+        // ── 키워드 ─────────────────────────────────────
+        List<String> keywords = new ArrayList<>();
+        String[] kwCandidates = {
+            "온천", "라멘", "스시", "초밥", "스키", "스노보드", "해수욕", "쇼핑",
+            "맛집", "카페", "박물관", "공원", "하이킹", "트레킹", "사케", "야키니쿠",
+            "타코야키", "교자", "라면", "문화재", "야경", "드라이브", "자연",
+            "성", "신사", "절", "디즈니", "유니버설", "료칸", "온천욕"
+        };
+        for (String kw : kwCandidates) {
+            if (input.contains(kw)) keywords.add(kw);
+        }
+
+        // ── 인원 수 파싱 ───────────────────────────────
+        int memberCount = req.getMemberCount();
+        Matcher m = Pattern.compile("(\\d+)\\s*[명인]").matcher(input);
+        if (m.find()) {
+            try { memberCount = Integer.parseInt(m.group(1)); } catch (NumberFormatException ignored) {}
+        }
+
+        AiGenerateRequest out = new AiGenerateRequest();
+        out.setStartLocation(req.getStartLocation() != null ? req.getStartLocation() : "인천국제공항");
+        out.setEndLocation(endLocation);   // null 이면 fallback 필요
+        out.setStartDate(req.getStartDate());
+        out.setEndDate(req.getEndDate());
+        out.setCountryCode(countryCode);
+        out.setMemberCount(memberCount);
+        out.setWithCar(withCar);
+        out.setTendency(tendency);
+        out.setKeywords(keywords);
+        out.setFoodScore(req.getFoodScore());
+        out.setAccommodationScore(req.getAccommodationScore());
+        out.setExtremeScore(req.getExtremeScore());
+        out.setTransportScore(req.getTransportScore());
+        return out;
     }
 
-    // ──────────────────────────────────────────────
-    //  자유 입력 → AI 파싱 → 구조화 → initSchedule
-    // ──────────────────────────────────────────────
-
-    @Transactional
-    public TravelResponse initFromNaturalInput(Long userId, AiNaturalRequest req) {
-        log.info("[AI natural] userId={}, input='{}'", userId, req.getNaturalInput());
-
-        // Step 1: Claude로 자유 텍스트 → 구조화된 여행 정보 추출
+    /**
+     * 규칙 파싱으로 여행지를 찾지 못했을 때만 사용하는 Claude fallback.
+     * 최소 정보(여행지 + 국가코드)만 추출하여 비용 최소화.
+     */
+    private AiGenerateRequest parseNaturalByAi(AiNaturalRequest req) {
         String systemPrompt =
-                "반드시 JSON만 응답. 마크다운·코드블록 금지.\n" +
-                "스키마: {\"endLocation\":\"여행지(한국어 도시명)\",\"countryCode\":\"JP|KR\"," +
-                "\"withCar\":bool,\"theme\":\"테마(2~4단어)\",\"keywords\":[\"키워드\"]," +
-                "\"tendency\":\"RELAX|BALANCED|ACTIVE\",\"memberCount\":숫자orNull," +
-                "\"departureFlightTime\":\"HH:mm orNull\",\"arrivalAtDestTime\":\"HH:mm orNull\"," +
-                "\"returnFlightTime\":\"HH:mm orNull\"}\n\n" +
-                "규칙:\n" +
-                "• endLocation: 도시/지역명만 (공항명 제외). 예: '벳푸', '오사카', '제주'\n" +
-                "• withCar: '렌트카','자차','드라이브' 언급 시 true\n" +
-                "• tendency: '빡빡','알차게','많이' → ACTIVE / '여유','천천히','힐링' → RELAX / 기본 BALANCED\n" +
-                "• 시간·인원 언급 없으면 null\n" +
-                "• keywords: 음식명·활동·키워드 배열 (최대 5개)";
+                "JSON만 응답. {\"endLocation\":\"여행지(한국어 도시명)\",\"countryCode\":\"JP|KR\"," +
+                "\"withCar\":bool,\"tendency\":\"RELAX|BALANCED|ACTIVE\",\"keywords\":[\"키워드\"]}";
 
-        String userPrompt = String.format(
-                "출발지: %s | 기간: %s ~ %s | 인원: %d명\n여행 설명: %s",
-                req.getStartLocation(), req.getStartDate(), req.getEndDate(),
-                req.getMemberCount(), req.getNaturalInput());
+        String userPrompt = String.format("기간:%s~%s 인원:%d명\n설명:%s",
+                req.getStartDate(), req.getEndDate(), req.getMemberCount(), req.getNaturalInput());
 
         String raw = claudeApiClient.chat(systemPrompt, userPrompt);
-        log.debug("[AI natural 파싱 결과] {}", raw);
+        log.debug("[AI natural fallback 결과] {}", raw);
         JsonNode parsed = parseJson(raw);
 
-        // Step 2: 파싱된 값 추출
-        String endLocation   = parsed.path("endLocation").asText("도쿄");
-        String countryCode   = parsed.path("countryCode").asText("JP");
-        boolean withCar      = parsed.path("withCar").asBoolean(false);
-        String theme         = nullableText(parsed, "theme");
-        int memberCount      = parsed.path("memberCount").isMissingNode() || parsed.path("memberCount").isNull()
-                ? req.getMemberCount()
-                : parsed.path("memberCount").asInt(req.getMemberCount());
-        String depTime  = nullableText(parsed, "departureFlightTime");
-        String arrTime  = nullableText(parsed, "arrivalAtDestTime");
-        String retTime  = nullableText(parsed, "returnFlightTime");
-
-        List<String> keywords = new ArrayList<>();
-        JsonNode kwNode = parsed.path("keywords");
-        if (kwNode.isArray()) kwNode.forEach(kw -> keywords.add(kw.asText()));
-        String tendencyStr = parsed.path("tendency").asText("BALANCED");
-
-        // Step 3: AiGenerateRequest 직접 세팅 후 initSchedule 위임
-        Tendency tendency;
-        try { tendency = Tendency.valueOf(tendencyStr.toUpperCase()); }
-        catch (Exception e) { tendency = Tendency.BALANCED; }
-
-        AiGenerateRequest structuredReq = new AiGenerateRequest();
-        structuredReq.setStartLocation(req.getStartLocation() != null ? req.getStartLocation() : "인천국제공항");
-        structuredReq.setEndLocation(endLocation);
-        structuredReq.setStartDate(req.getStartDate());
-        structuredReq.setEndDate(req.getEndDate());
-        structuredReq.setCountryCode(countryCode);
-        structuredReq.setMemberCount(memberCount);
-        structuredReq.setWithCar(withCar);
-        structuredReq.setTendency(tendency);
-        structuredReq.setTheme(theme);
-        structuredReq.setKeywords(keywords);
-        structuredReq.setDepartureFlightTime(depTime);
-        structuredReq.setArrivalAtDestTime(arrTime);
-        structuredReq.setReturnFlightTime(retTime);
-        structuredReq.setFoodScore(req.getFoodScore());
-        structuredReq.setAccommodationScore(req.getAccommodationScore());
-        structuredReq.setExtremeScore(req.getExtremeScore());
-        structuredReq.setTransportScore(req.getTransportScore());
-
-        log.info("[AI natural → 구조화] 여행지={}, 렌트카={}, 테마={}, 키워드={}",
-                endLocation, withCar, theme, keywords);
-        return initSchedule(userId, structuredReq);
+        AiGenerateRequest out = new AiGenerateRequest();
+        out.setStartLocation(req.getStartLocation() != null ? req.getStartLocation() : "인천국제공항");
+        out.setEndLocation(parsed.path("endLocation").asText("도쿄"));
+        out.setStartDate(req.getStartDate());
+        out.setEndDate(req.getEndDate());
+        out.setCountryCode(parsed.path("countryCode").asText("JP"));
+        out.setMemberCount(req.getMemberCount());
+        out.setWithCar(parsed.path("withCar").asBoolean(false));
+        out.setTendency(parseTendency(parsed.path("tendency").asText("BALANCED")));
+        List<String> kws = new ArrayList<>();
+        parsed.path("keywords").forEach(kw -> kws.add(kw.asText()));
+        out.setKeywords(kws);
+        out.setFoodScore(req.getFoodScore());
+        out.setAccommodationScore(req.getAccommodationScore());
+        out.setExtremeScore(req.getExtremeScore());
+        out.setTransportScore(req.getTransportScore());
+        return out;
     }
 
-    // ──────────────────────────────────────────────
-    //  Phase 2: Day 단건 생성 (생성 or 재생성)
-    // ──────────────────────────────────────────────
+    /**
+     * 도시명 사전: 더 긴/구체적인 지명을 앞에 배치해 오탐 방지.
+     * LinkedHashMap으로 순서 보장 (JP 먼저, 각 국가 내에서 우선순위 순).
+     */
+    private Map<String, String[]> buildCityDictionary() {
+        Map<String, String[]> map = new LinkedHashMap<>();
+        map.put("JP", new String[]{
+            // 홋카이도
+            "하코다테", "삿포로", "오타루", "홋카이도",
+            // 도호쿠
+            "센다이",
+            // 간토
+            "닛코", "가마쿠라", "하코네", "요코하마", "도쿄",
+            // 고신에쓰·중부
+            "가나자와", "시라카와고", "나고야", "아타미", "시즈오카",
+            // 간사이
+            "나라", "고베", "교토", "오사카", "와카야마",
+            // 주고쿠·시코쿠
+            "히로시마", "미야지마",
+            // 규슈
+            "나가사키", "구마모토", "유후인", "벳푸", "가고시마", "후쿠오카",
+            // 오키나와
+            "미야코지마", "이시가키", "나하", "오키나와"
+        });
+        map.put("KR", new String[]{
+            "속초", "강릉", "춘천", "평창",
+            "전주", "여수", "순천",
+            "통영", "거제", "남해", "경주", "부산",
+            "제주",
+            "서울", "인천"
+        });
+        return map;
+    }
 
-    @Transactional
-    public PlanDayResponse generateDay(Long userId, Long travelId, int dayNumber) {
-        TravelPlan travel = getAccessibleTravel(userId, travelId);
-        int totalDays = (int) daysBetween(travel.getStartDate(), travel.getEndDate());
-        LocalDate date = travel.getStartDate().plusDays(dayNumber - 1);
+    // ══════════════════════════════════════════════
+    //  전체 Day 단일 Claude 호출
+    // ══════════════════════════════════════════════
 
-        // 기존 Day 삭제 (재생성 시)
-        planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
-                .ifPresent(planDayRepository::delete);
-        planDayRepository.flush();
+    /**
+     * 모든 Day를 한 번의 Claude 호출로 생성하고 저장.
+     * 기존 N회 호출 → 1회로 압축.
+     */
+    private void generateAllDays(TravelPlan travel, AiGenerateRequest req, int totalDays) {
+        log.info("[AI 전체 Day 생성 시작] travelId={}, {}일치", travel.getId(), totalDays);
 
-        log.info("[AI generateDay] travelId={}, day={}/{}", travelId, dayNumber, totalDays);
+        String raw = claudeApiClient.chat(
+                buildAllDaysSystemPrompt(req.getCountryCode(),
+                        req.getFoodScore(), req.getAccommodationScore(),
+                        req.getExtremeScore(), req.getTransportScore()),
+                buildAllDaysUserMessage(travel, req, totalDays));
 
-        // 이전 Day 마지막 위치 파악 (동선 연속성)
-        String prevLastLocation = resolvePrevLastLocation(travel, dayNumber);
+        log.debug("[AI 전체 Day 응답 length={}]", raw.length());
 
-        // 숙소 힌트
-        String accommodationHint = accommodationRepository.findByTravelPlan(travel).stream()
-                .map(a -> a.getHotelName() + "(" + a.getCheckIn() + "~" + a.getCheckOut() + ")")
-                .reduce("", (a, b) -> a + b + " ");
+        JsonNode allDays = parseJson(raw);
 
-        // 항공편 시간 힌트
-        String flightHint = buildFlightHint(travel, dayNumber, totalDays);
+        // 응답이 배열이 아닌 경우 단일 객체로도 허용
+        if (allDays.isObject()) {
+            allDays = objectMapper.createArrayNode().add(allDays);
+        }
 
-        String dayRaw = claudeApiClient.chat(
-                buildDaySystemPrompt(travel.getCountryCode(),
-                        travel.getFoodScore(), travel.getAccommodationScore(),
-                        travel.getExtremeScore(), travel.getTransportScore()),
-                buildDayUserMessage(travel, dayNumber, totalDays, date,
-                        prevLastLocation, accommodationHint.trim(), flightHint));
-        log.debug("[AI day{} 응답] {}", dayNumber, dayRaw);
+        int saved = 0;
+        for (JsonNode dayNode : allDays) {
+            int dayNum = dayNode.path("dayNumber").asInt(++saved);
+            if (dayNum < 1 || dayNum > totalDays) continue;
+            LocalDate date = travel.getStartDate().plusDays(dayNum - 1);
 
-        JsonNode dayNode = parseJson(dayRaw);
-        savePlanDay(travel, dayNode, dayNumber, date);
+            // 기존 Day 있으면 삭제 (재시도 시)
+            planDayRepository.findByTravelPlanAndDayNumber(travel, dayNum)
+                    .ifPresent(planDayRepository::delete);
 
-        // flush + 1차 캐시 clear → JOIN FETCH로 재조회 (routes가 빈 리스트로 반환되는 Hibernate 캐시 버그 방지)
+            savePlanDay(travel, dayNode, dayNum, date);
+        }
+
         entityManager.flush();
         entityManager.clear();
-        // clear() 후 travel 엔티티가 detached 되므로 재조회
-        TravelPlan travelFresh = travelPlanRepository.findById(travelId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
-        return planDayRepository.findByTravelPlanAndDayNumber(travelFresh, dayNumber)
-                .map(PlanDayResponse::from)
-                .orElseThrow(() -> new IllegalStateException("Day 저장 후 조회 실패: day=" + dayNumber));
+        log.info("[AI 전체 Day 생성 완료] travelId={}, 저장 Day={}개", travel.getId(), saved);
     }
 
     // ──────────────────────────────────────────────
-    //  레거시 호환: 전체 일괄 생성 (구버전 호출 시 fallback)
+    //  전체 Day 프롬프트 (압축 버전)
     // ──────────────────────────────────────────────
 
-    @Transactional
-    public TravelResponse generateSchedule(Long userId, AiGenerateRequest req) {
-        TravelResponse init = initSchedule(userId, req);
-        int totalDays = (int) daysBetween(req.getStartDate(), req.getEndDate());
-        for (int d = 1; d <= totalDays; d++) {
-            generateDay(userId, init.getId(), d);
+    private String buildAllDaysSystemPrompt(String countryCode,
+                                             int foodScore, int accommodationScore,
+                                             int extremeScore, int transportScore) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+
+        String base = "JSON 배열만 응답. 마크다운 금지.\n" +
+                "스키마(배열): [" + DAY_SCHEMA + "]\n" +
+                (isJp
+                    ? "일본 실제 좌표·유명 장소 기준. CAR 비용=엔화×9원. 고속도로 톨비 포함."
+                    : "한국 실제 좌표·원화 요금 기준.") +
+                " 하루 4~6개 route.\n" +
+                "교통: WALK=1km이하/도보15분이내, CAR=3km초과, BUS/TRAIN=도시간이동. WALK 하루 최소1구간.\n" +
+                "장소 description: RESTAURANT/CAFE=대표메뉴+가격대 2~3문장 필수. 그외=주요볼거리·특징 1~2문장.\n" +
+                "공항이동: Day1첫route=도착공항→여행지. 마지막날마지막route=여행지→출발공항.\n" +
+                "렌트카여행: 주차장 기점 → 주변 WALK → 다음지역 CAR. 관광지밀집구역 내 이동은 WALK.";
+
+        String prefRules = buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
+        return base + prefRules;
+    }
+
+    private String buildAllDaysUserMessage(TravelPlan travel, AiGenerateRequest req, int totalDays) {
+        String transport = travel.isWithCar()
+                ? "렌트카(장거리CAR, 근거리/관광지내WALK)"
+                : "대중교통(SUBWAY/BUS/TRAIN, 도보가능거리WALK)";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format(
+                "여행지:%s(%s) %d일차~%d일차(%s~%s) 인원:%d명 이동:%s 테마:%s 키워드:%s\n",
+                travel.getEndLocation(), travel.getCountryCode(),
+                1, totalDays, travel.getStartDate(), travel.getEndDate(),
+                travel.getMemberCount() != null ? travel.getMemberCount() : 2,
+                transport,
+                travel.getTheme() != null ? travel.getTheme() : "일반관광",
+                travel.getKeywords() != null && !travel.getKeywords().isEmpty()
+                        ? travel.getKeywords() : "없음"));
+
+        // 항공편 힌트
+        if (req.getArrivalAtDestTime() != null) {
+            sb.append(String.format("Day1: 현지공항 도착 %s → %s로 이동 포함.\n",
+                    req.getArrivalAtDestTime(), travel.getEndLocation()));
+        } else {
+            sb.append(String.format("Day1: 첫route=도착공항→%s 이동 포함.\n", travel.getEndLocation()));
         }
-        return init;
+        if (req.getReturnFlightTime() != null) {
+            sb.append(String.format("마지막날: %s 이전 공항 도착. 마지막route=%s→공항.\n",
+                    req.getReturnFlightTime(), travel.getEndLocation()));
+        }
+
+        // 숙박 등급 힌트
+        sb.append(String.format("숙박등급: 점수%d/10 → %s.\n",
+                travel.getAccommodationScore(),
+                getAccommodationTypeLabel(travel.getCountryCode(), travel.getAccommodationScore())));
+
+        sb.append(String.format("전체 %d일 일정을 JSON 배열로 출력.", totalDays));
+        return sb.toString();
     }
 
     // ──────────────────────────────────────────────
-    //  빈 시간 채우기
+    //  단건 Day 프롬프트 (재생성용, 기존 유지)
     // ──────────────────────────────────────────────
 
-    public List<Map<String, Object>> fillFreeTime(Long userId, Long travelId,
-                                                   Integer dayNumber, AiFillRequest req) {
-        log.info("[AI fillFreeTime] travelId={}, day={}", travelId, dayNumber);
-        String raw = claudeApiClient.chat(buildFillSystemPrompt(), buildFillUserMessage(req));
-        JsonNode recs = parseJson(raw);
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (JsonNode place : recs.path("places")) {
-            Map<String, Object> item = new HashMap<>();
-            item.put("name",        place.path("name").asText());
-            item.put("address",     place.path("address").asText());
-            item.put("lat",         place.path("lat").asDouble());
-            item.put("lng",         place.path("lng").asDouble());
-            item.put("type",        place.path("type").asText());
-            item.put("description", place.path("description").asText());
-            item.put("stayMinutes", place.path("stayMinutes").asInt(60));
-            result.add(item);
+    private String buildDaySystemPrompt(String countryCode,
+                                        int foodScore, int accommodationScore,
+                                        int extremeScore, int transportScore) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+
+        String base = "JSON만 응답. 마크다운 금지.\n스키마: " + DAY_SCHEMA + "\n" +
+                (isJp
+                    ? "일본 실제 좌표·유명 장소. CAR비용=엔×9원. 고속도로 톨비 포함."
+                    : "한국 실제 좌표·원화 기준.") +
+                " 4~6 route.\n" +
+                "교통: WALK=1km이하/15분이내, CAR=3km초과, BUS/TRAIN=도시간. WALK 최소1구간.\n" +
+                "RESTAURANT/CAFE description=대표메뉴+가격대 필수.\n" +
+                "Day1첫route=공항→여행지. 마지막날마지막route=여행지→공항.";
+
+        return base + buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
+    }
+
+    private String buildDayUserMessage(TravelPlan travel, int dayNum, int totalDays,
+                                       LocalDate date, String prevLocation,
+                                       String accommodationHint, String flightHint) {
+        String transport = travel.isWithCar()
+                ? "렌트카(장거리CAR, 근거리WALK)"
+                : "대중교통(SUBWAY/BUS/TRAIN, 도보WALK)";
+        return String.format(
+                "여행지:%s | %d일차/%d일 | %s | 인원:%d명 | %s | 테마:%s | 키워드:%s\n" +
+                "이전날마지막위치:%s | 숙소:%s | %s\n%d일차 JSON.",
+                travel.getEndLocation(), dayNum, totalDays, date,
+                travel.getMemberCount() != null ? travel.getMemberCount() : 2,
+                transport,
+                travel.getTheme() != null ? travel.getTheme() : "일반관광",
+                travel.getKeywords() != null && !travel.getKeywords().isEmpty()
+                        ? travel.getKeywords() : "없음",
+                prevLocation.isEmpty() ? "미정" : prevLocation,
+                accommodationHint.isEmpty() ? "미정" : accommodationHint,
+                flightHint,
+                dayNum);
+    }
+
+    private String buildFlightHint(TravelPlan travel, int dayNum, int totalDays) {
+        if (dayNum == 1) {
+            String base = "Day1 첫route=도착공항→" + travel.getEndLocation() + " 이동 포함.";
+            if (travel.getArrivalAtDestTime() != null) {
+                return "현지공항 도착 " + travel.getArrivalAtDestTime() + ". " + base;
+            }
+            return base;
         }
-        return result;
+        if (dayNum == totalDays && travel.getReturnFlightTime() != null) {
+            return travel.getReturnFlightTime() + " 이전 공항 도착. 마지막route=" + travel.getEndLocation() + "→출발공항.";
+        }
+        return "";
+    }
+
+    // ──────────────────────────────────────────────
+    //  선호도 강제 규칙 (시스템 프롬프트 레벨)
+    // ──────────────────────────────────────────────
+
+    private String buildPrefSystemRules(String countryCode, int food, int accommodation,
+                                        int extreme, int transport) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        StringBuilder sb = new StringBuilder("\n\n【선호도 강제 규칙 - 위반 금지】");
+
+        // 음식
+        if (food >= 9) {
+            sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE 하루 3곳이상. ")
+              .append(isJp ? "미슐랭·식베로그 고평점 맛집만. 편의점·체인점 금지." : "유명맛집만. 프랜차이즈 금지.");
+        } else if (food >= 7) {
+            sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE 하루 2곳이상. 현지맛집 중심.");
+        } else if (food >= 4) {
+            sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE 하루 1~2곳. 무난한 현지식당.");
+        } else if (food >= 2) {
+            sb.append("\n▶음식(").append(food).append("/10): 식사 최소화. RESTAURANT 하루 최대1곳. ")
+              .append(isJp ? "저렴한 정식집·편의점 OK." : "저렴한 식당 OK.");
+        } else {
+            sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE route 생성 금지. 편의점 이용 가정.");
+        }
+
+        // 숙박 (동선 내 호텔 이동 route에 적용)
+        if (accommodation >= 8) {
+            sb.append("\n▶숙박(").append(accommodation).append("/10): ")
+              .append(isJp ? "료칸·5성급 호텔만. 비즈니스호텔 언급 금지." : "고급리조트·5성급만.");
+        } else if (accommodation <= 2) {
+            sb.append("\n▶숙박(").append(accommodation).append("/10): ")
+              .append(isJp ? "게스트하우스·캡슐호텔만. 고급호텔 언급 금지." : "게스트하우스·모텔만.");
+        }
+
+        // 액티비티
+        if (extreme >= 8) {
+            sb.append("\n▶액티비티(").append(extreme).append("/10): 하이킹·래프팅·스키 등 체험 route 1개이상 필수.");
+        } else if (extreme <= 2) {
+            sb.append("\n▶액티비티(").append(extreme).append("/10): 스포츠·어드벤처 route 금지. 관광·카페·쇼핑 위주.");
+        }
+
+        // 이동
+        if (transport >= 8) {
+            sb.append("\n▶이동(").append(transport).append("/10): ")
+              .append(isJp ? "신칸센·특급열차·페리 등 경치좋은 이동 route 포함." : "KTX·관광열차·페리 포함.");
+        } else if (transport <= 2) {
+            sb.append("\n▶이동(").append(transport).append("/10): 하루 총이동 90분이하. 한구역(2km이내) 집중.")
+              .append(" 먼거리 이동 route 금지.");
+        }
+
+        return sb.toString();
+    }
+
+    // ──────────────────────────────────────────────
+    //  빈 시간 채우기 프롬프트
+    // ──────────────────────────────────────────────
+
+    private String buildFillSystemPrompt() {
+        return "JSON만 응답.\n스키마:{\"places\":[{\"name\":\"장소명\",\"address\":\"주소\"," +
+               "\"lat\":위도,\"lng\":경도,\"type\":\"RESTAURANT|CAFE|PARK|MUSEUM|SHOPPING|ETC\"," +
+               "\"description\":\"2줄이내\",\"stayMinutes\":숫자}]}\n3~5개, 실제 좌표.";
+    }
+
+    private String buildFillUserMessage(AiFillRequest req) {
+        return String.format("현재위치:%s | 빈시간:%s~%s\nJSON으로 장소 추천.",
+                req.getCurrentLocation(), req.getFreeTimeStart(), req.getFreeTimeEnd());
     }
 
     // ──────────────────────────────────────────────
@@ -336,7 +717,7 @@ public class AiScheduleService {
         for (JsonNode routeNode : dayNode.path("routes")) {
             Location from = resolveLocation(routeNode.path("fromLocation"), date);
             Location to   = resolveLocation(routeNode.path("toLocation"),   date);
-            String note = routeNode.path("note").isMissingNode() ? null : routeNode.path("note").asText(null);
+            String note   = routeNode.path("note").isMissingNode() ? null : routeNode.path("note").asText(null);
             planRouteRepository.save(PlanRoute.builder()
                     .planDay(planDay)
                     .sequence(seq++)
@@ -348,234 +729,14 @@ public class AiScheduleService {
                     .note(note)
                     .build());
         }
-        log.info("[AI day{} 저장] {}개 route", dayNumber, seq - 1);
+        log.info("[저장] day{}({}) {}개 route", dayNumber, date, seq - 1);
         return planDay;
-    }
-
-    // ──────────────────────────────────────────────
-    //  프롬프트 빌더
-    // ──────────────────────────────────────────────
-
-    private static final String SKELETON_SCHEMA =
-            """
-            {"title":"여행 제목","rentalCar":{"carType":"차종","dailyRateKrw":숫자,"rentalDays":숫자,"estimatedFuelKrw":숫자,"estimatedTollKrw":숫자},"accommodations":[{"hotelName":"호텔명","checkIn":"YYYY-MM-DD","checkOut":"YYYY-MM-DD","pricePerNightKrw":숫자}]}
-            """;
-
-    private static final String DAY_SCHEMA =
-            """
-            {"dayNumber":숫자,"date":"YYYY-MM-DD","routes":[{"fromLocation":{"name":"장소명","address":"주소","lat":위도,"lng":경도,"type":"RESTAURANT|CAFE|HOTEL|STATION|AIRPORT|SHOPPING|MUSEUM|PARK|ETC","description":"장소설명"},"toLocation":{"name":"장소명","address":"주소","lat":위도,"lng":경도,"type":"...","description":"장소설명"},"transport":"CAR|WALK|SUBWAY|BUS|TRAIN","departureTime":"HH:mm","durationMinutes":숫자,"estimatedCost":숫자,"note":"이동수단 상세설명"}]}
-            """;
-
-    private String buildSkeletonSystemPrompt(String countryCode) {
-        String base = "반드시 JSON만 응답. 마크다운·코드블록 금지.\n스키마: " + SKELETON_SCHEMA.strip();
-        if ("JP".equalsIgnoreCase(countryCode)) {
-            return base + "\n일본 렌트카(경차 5000~8000엔/일, 하이브리드 7000~10000엔/일, 1엔=9원), 숙박(도심 8000~15000엔/박, 1엔=9원). withCar=false면 rentalCar=null.";
-        }
-        return base + "\n한국 렌트카/호텔 시세 기준. withCar=false면 rentalCar=null.";
-    }
-
-    private String buildSkeletonUserMessage(AiGenerateRequest req, int totalDays) {
-        // 숙박 점수 → 구체적 등급 지시 (스켈레톤에서 숙소 선정 시 반드시 준수)
-        int accScore = req.getAccommodationScore();
-        String accConstraint;
-        if ("JP".equalsIgnoreCase(req.getCountryCode())) {
-            if (accScore >= 9)      accConstraint = "최고급 료칸·5성급 호텔 필수(1박 30,000엔 이상)";
-            else if (accScore >= 7) accConstraint = "고급 호텔·부티크 료칸(1박 15,000~30,000엔)";
-            else if (accScore >= 4) accConstraint = "일반 비즈니스 호텔(1박 8,000~15,000엔)";
-            else if (accScore >= 2) accConstraint = "저가 비즈니스 호텔·게스트하우스(1박 4,000~8,000엔)";
-            else                    accConstraint = "최저가 캡슐호텔·도미토리(1박 2,000~4,000엔)";
-        } else {
-            if (accScore >= 9)      accConstraint = "최고급 호텔·리조트(1박 30만원 이상)";
-            else if (accScore >= 7) accConstraint = "고급 호텔(1박 15~30만원)";
-            else if (accScore >= 4) accConstraint = "일반 호텔(1박 8~15만원)";
-            else if (accScore >= 2) accConstraint = "모텔·게스트하우스(1박 4~8만원)";
-            else                    accConstraint = "최저가 게스트하우스·도미토리(1박 2~4만원)";
-        }
-        return String.format(
-                "여행지:%s(%s) 기간:%s~%s(%d일) 인원:%d명 테마:%s 이동:%s 예산:%s\n" +
-                "【숙박 등급 강제】숙박점수=%d/10 → %s. 이 등급 외 숙소 추천 절대 금지.\n" +
-                "제목·렌트카·숙박만 JSON으로. 일정 포함 금지.",
-                req.getEndLocation(), req.getCountryCode(),
-                req.getStartDate(), req.getEndDate(), totalDays, req.getMemberCount(),
-                req.getTheme() != null ? req.getTheme() : "일반관광",
-                req.isWithCar() ? "렌트카" : "대중교통",
-                req.getBudgetTotal() != null ? req.getBudgetTotal() + "원" : "제한없음",
-                accScore, accConstraint);
-    }
-
-    private String buildDaySystemPrompt(String countryCode,
-                                        int foodScore, int accommodationScore,
-                                        int extremeScore, int transportScore) {
-        String base = "반드시 JSON만 응답. 마크다운·코드블록 금지.\n스키마: " + DAY_SCHEMA.strip();
-
-        String transportRules =
-                "\n\n【교통수단 선택 규칙 - 반드시 준수】\n" +
-                "• WALK: 직선거리 1km 이하 OR 도보 15분 이하인 모든 구간. 렌트카 여행이어도 예외 없음.\n" +
-                "• CAR: 직선거리 3km 초과 구간, 도시 외곽 이동, 드라이브 코스. 절대 단거리에 사용 금지.\n" +
-                "• 렌트카 여행 동선 원칙: 주차장에 차를 세우고 주변 여러 곳을 걸어서 이동 후 다음 지역으로 차로 이동.\n" +
-                "• 관광지 밀집 구역(도보 이동 가능 반경) 내 구간은 무조건 WALK.\n" +
-                "• WALK: estimatedCost=0, durationMinutes=도보 시간.\n" +
-                "• 하루 동선에 WALK 구간 최소 1개 이상 포함.\n" +
-                "• BUS/TRAIN: 공항↔도시 간 이동, 렌트카 없는 여행의 도시 간 이동에 사용.";
-
-        String descriptionRules =
-                "\n\n【장소 description 작성 규칙 - 반드시 포함】\n" +
-                "• RESTAURANT/CAFE: '대표메뉴명(가격대), 특징, 추천포인트' 형식으로 2~3문장.\n" +
-                "• MUSEUM/PARK/SHOPPING: 주요 볼거리·체험 내용·입장료 포함 1~2문장.\n" +
-                "• HOTEL/STATION/AIRPORT: 간단한 특징 또는 빈 문자열 가능.\n" +
-                "• description은 절대 null이나 빈 문자열로 두지 말 것 (RESTAURANT는 필수).";
-
-        String multiCityRules =
-                "\n\n【멀티시티·공항↔여행지 이동 규칙】\n" +
-                "• 여행지가 직항 공항에서 거리가 있는 경우 Day 1 첫 번째 route에 반드시 '도착공항→여행지' 이동 구간 포함.\n" +
-                "• 마지막 Day 마지막 route에 '여행지→출발공항' 이동 구간 포함.\n" +
-                "• 공항↔도시 이동 시 note 필드에 교통편 명시.\n" +
-                "• 렌트카 여행이면 공항에서 렌트카 픽업 후 CAR로 이동. 렌트카 없으면 BUS 또는 TRAIN.\n" +
-                "• 주요 공항: 삿포로→신치토세공항, 도쿄→나리타/하네다, 오사카→간사이, 후쿠오카→후쿠오카공항, 오키나와→나하공항, 벳푸/유후인→후쿠오카 또는 오이타공항.";
-
-        // 선호도 점수 기반 강제 규칙 (시스템 프롬프트 레벨 → AI가 반드시 준수)
-        String prefRules = buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
-
-        if ("JP".equalsIgnoreCase(countryCode)) {
-            return base +
-                    "\n일본 실제 좌표·유명 맛집 기준. CAR 이동비용 엔→원(1엔=9원), 고속도로 톨비 포함. 4~6 route." +
-                    transportRules + descriptionRules + multiCityRules + prefRules;
-        }
-        return base +
-                "\n실제 좌표. 한국 요금 기준. 4~6 route." +
-                transportRules + descriptionRules + multiCityRules + prefRules;
-    }
-
-    /**
-     * 선호도 점수(0~10)를 시스템 프롬프트 수준의 강제 규칙으로 변환.
-     * "힌트"가 아닌 "위반 시 응답 거부" 수준의 강도로 작성.
-     */
-    private String buildPrefSystemRules(String countryCode, int food, int accommodation, int extreme, int transport) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
-        StringBuilder sb = new StringBuilder("\n\n【사용자 선호도 강제 규칙 - 위반 절대 금지】");
-
-        // ── 음식 ──────────────────────────────────────────────────────
-        if (food >= 9) {
-            sb.append("\n▶ 음식(").append(food).append("/10 최상): ")
-              .append("RESTAURANT/CAFE route 하루 3곳 이상 필수. ")
-              .append(isJp ? "미슐랭·식베로그 고평점 맛집, 현지인 줄 서는 유명 식당만 선택. 편의점·패스트푸드·체인점 완전 금지."
-                           : "유명 맛집, 현지 특산 음식점만 선택. 프랜차이즈 완전 금지.");
-        } else if (food >= 7) {
-            sb.append("\n▶ 음식(").append(food).append("/10 높음): ")
-              .append("RESTAURANT/CAFE route 하루 2곳 이상. ")
-              .append(isJp ? "현지 유명 맛집 필수 포함. 가격대 무관하게 맛 중심 선택."
-                           : "현지 맛집 2곳 이상. 맛 중심 선택.");
-        } else if (food >= 4) {
-            sb.append("\n▶ 음식(").append(food).append("/10 보통): ")
-              .append("RESTAURANT/CAFE route 하루 1~2곳. 무난한 현지 식당 선택.");
-        } else if (food >= 2) {
-            sb.append("\n▶ 음식(").append(food).append("/10 낮음): ")
-              .append("식사는 최소화. RESTAURANT route 하루 최대 1곳. ")
-              .append(isJp ? "저렴한 정식집·라멘집·편의점 수준 OK."
-                           : "저렴한 식당 또는 편의점 수준 OK.");
-        } else {
-            sb.append("\n▶ 음식(").append(food).append("/10 최하): ")
-              .append("RESTAURANT/CAFE type route 생성 금지. 식사는 이동 중 편의점으로 해결하는 것으로 가정. ")
-              .append("식당 방문 일정 포함 절대 금지.");
-        }
-
-        // ── 숙박 (Day 동선에 hotel 관련 이동이 생기는 경우) ──────────
-        if (accommodation >= 8) {
-            sb.append("\n▶ 숙박(").append(accommodation).append("/10 높음): ")
-              .append(isJp ? "숙소 이동 route에 료칸·5성급 호텔만 언급. 비즈니스 호텔·게스트하우스 언급 금지."
-                           : "숙소 이동 route에 고급 리조트·5성급 호텔만 언급.");
-        } else if (accommodation <= 2) {
-            sb.append("\n▶ 숙박(").append(accommodation).append("/10 낮음): ")
-              .append(isJp ? "숙소 이동 route에 게스트하우스·캡슐호텔·저가 비즈니스 호텔만 언급. 고급 호텔·료칸 언급 금지."
-                           : "숙소 이동 route에 게스트하우스·모텔·저가 호텔만 언급. 고급 호텔 언급 금지.");
-        }
-
-        // ── 익스트림/액티비티 ─────────────────────────────────────────
-        if (extreme >= 8) {
-            sb.append("\n▶ 액티비티(").append(extreme).append("/10 높음): ")
-              .append("하이킹·래프팅·스카이다이빙·스키·서핑·ATV 등 체험형 액티비티 route 1개 이상 필수. ")
-              .append("미술관·박물관만 있는 일정은 불가.");
-        } else if (extreme >= 5) {
-            sb.append("\n▶ 액티비티(").append(extreme).append("/10 보통): ")
-              .append("가벼운 체험(온천 체험·쿠킹클래스·자전거 투어 등) 1개 포함 권장.");
-        } else if (extreme <= 2) {
-            sb.append("\n▶ 액티비티(").append(extreme).append("/10 낮음): ")
-              .append("스포츠·어드벤처·체험형 액티비티 route 생성 금지. ")
-              .append("관광지·미술관·카페·쇼핑·공원 위주 편안한 일정만 구성.");
-        }
-
-        // ── 이동/교통 ────────────────────────────────────────────────
-        if (transport >= 8) {
-            sb.append("\n▶ 이동(").append(transport).append("/10 높음): ")
-              .append(isJp ? "신칸센·특급열차·야간버스·페리 등 이동 자체가 볼거리인 route 포함 권장. 이동 시간이 길어도 OK."
-                           : "KTX·관광열차·해상 페리 등 경치 좋은 이동 route 포함 권장.");
-        } else if (transport <= 2) {
-            sb.append("\n▶ 이동(").append(transport).append("/10 낮음): ")
-              .append("이동 최소화 필수. 하루 총 이동시간 합계 90분 이하 목표. ")
-              .append("한 구역(반경 2km) 내에서 여러 장소를 도보로 이동하는 동선으로 구성. ")
-              .append("먼 거리 이동 route 생성 금지.");
-        }
-
-        return sb.toString();
-    }
-
-    private String buildDayUserMessage(TravelPlan travel, int dayNum, int totalDays,
-                                       LocalDate date, String prevLocation,
-                                       String accommodationHint, String flightHint) {
-        String keywords = travel.getKeywords() != null ? travel.getKeywords() : "";
-        String theme    = travel.getTheme()    != null ? travel.getTheme()    : "일반 관광";
-        String transport = travel.isWithCar()
-                ? "렌트카(장거리 CAR, 근거리·관광지 내 이동은 WALK 필수)"
-                : "대중교통(SUBWAY/BUS/TRAIN, 도보 가능 거리는 WALK)";
-
-        return String.format(
-                "여행지:%s | %d일차/%d일 | 날짜:%s | 인원:%d명 | 이동:%s | 테마:%s | 키워드:%s\n" +
-                "이전날 마지막 위치:%s | 숙소:%s | %s\n" +
-                "선호도점수(시스템규칙참조) 음식:%d 숙박:%d 익스트림:%d 이동:%d\n" +
-                "%d일차 하루 동선만 JSON으로. routes만 포함, 4~6개.",
-                travel.getEndLocation(), dayNum, totalDays, date,
-                travel.getMemberCount() != null ? travel.getMemberCount() : 2,
-                transport, theme,
-                keywords.isEmpty() ? "없음" : keywords,
-                prevLocation.isEmpty() ? "미정" : prevLocation,
-                accommodationHint.isEmpty() ? "미정" : accommodationHint,
-                flightHint,
-                travel.getFoodScore(), travel.getAccommodationScore(),
-                travel.getExtremeScore(), travel.getTransportScore(),
-                dayNum);
-    }
-
-    private String buildFlightHint(TravelPlan travel, int dayNum, int totalDays) {
-        if (dayNum == 1) {
-            StringBuilder sb = new StringBuilder();
-            if (travel.getArrivalAtDestTime() != null) {
-                sb.append("현지 공항 도착 시각: ").append(travel.getArrivalAtDestTime()).append(". ");
-            }
-            sb.append("Day 1 첫 route는 반드시 도착 공항 → 여행지(").append(travel.getEndLocation())
-              .append(") 이동 구간 포함. 여행지가 공항에서 멀면 BUS/TRAIN/CAR로 이동 경로 추가.");
-            return sb.toString();
-        }
-        if (dayNum == totalDays && travel.getReturnFlightTime() != null) {
-            return "마지막날 " + travel.getReturnFlightTime() + " 이전 공항 도착 필요. " +
-                   "마지막 route는 여행지 → 출발 공항 이동 구간 포함.";
-        }
-        return "";
-    }
-
-    private String buildFillSystemPrompt() {
-        return "반드시 JSON만 응답.\n스키마:{\"places\":[{\"name\":\"장소명\",\"address\":\"주소\",\"lat\":위도,\"lng\":경도,\"type\":\"RESTAURANT|CAFE|PARK|MUSEUM|SHOPPING|ETC\",\"description\":\"2줄이내\",\"stayMinutes\":숫자}]}\n3~5개, 실제 좌표.";
-    }
-
-    private String buildFillUserMessage(AiFillRequest req) {
-        return String.format("현재위치:%s | 빈시간:%s~%s\nJSON으로 장소 추천.",
-                req.getCurrentLocation(), req.getFreeTimeStart(), req.getFreeTimeEnd());
     }
 
     // ──────────────────────────────────────────────
     //  헬퍼
     // ──────────────────────────────────────────────
 
-    /** 이전 Day 마지막 도착지 이름 반환 (동선 연속성) */
     private String resolvePrevLastLocation(TravelPlan travel, int dayNumber) {
         if (dayNumber <= 1) return "";
         return planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber - 1)
@@ -607,7 +768,7 @@ public class AiScheduleService {
         }
         try { return objectMapper.readTree(cleaned); }
         catch (JacksonException e) {
-            log.error("[AI JSON 파싱 실패] raw={}", raw, e);
+            log.error("[JSON 파싱 실패] raw={}", raw, e);
             throw new IllegalStateException("Claude 응답 파싱 실패: " + e.getMessage(), e);
         }
     }
@@ -620,9 +781,7 @@ public class AiScheduleService {
         LocationType type  = parseLocationType(node.path("type").asText("ETC"));
         String description = node.path("description").asText(null);
 
-        // Google Places API로 실제 좌표 조회 (AI 할루시네이션 방지)
-        double lat = aiLat;
-        double lng = aiLng;
+        double lat = aiLat, lng = aiLng;
         String realAddress = address;
         LocationSource source = LocationSource.AI;
         String externalId = "ai-" + name.replaceAll("\\s+", "-") + "-" + date;
@@ -633,25 +792,50 @@ public class AiScheduleService {
                     googlePlacesClient.searchText(query, aiLat, aiLng, 1);
             if (!results.isEmpty()) {
                 GooglePlacesClient.GooglePlaceResult hit = results.get(0);
-                lat         = hit.lat();
-                lng         = hit.lng();
-                realAddress = hit.address();
-                source      = LocationSource.GOOGLE;
-                externalId  = "google-" + name.replaceAll("\\s+", "-") + "-" + date;
-                log.info("[Places API] '{}' → 실좌표 ({}, {}), 주소: {}", name, lat, lng, realAddress);
+                lat = hit.lat(); lng = hit.lng(); realAddress = hit.address();
+                source = LocationSource.GOOGLE;
+                externalId = "google-" + name.replaceAll("\\s+", "-") + "-" + date;
+                log.info("[Places] '{}' → ({}, {})", name, lat, lng);
             } else {
-                log.warn("[Places API] '{}' 검색 결과 없음 → AI 좌표 사용 ({}, {})", name, aiLat, aiLng);
+                log.warn("[Places] '{}' 결과없음 → AI 좌표 사용", name);
             }
         } catch (Exception e) {
-            log.warn("[Places API 실패] '{}' - AI 좌표 사용. 원인: {}", name, e.getMessage());
+            log.warn("[Places 실패] '{}' - AI 좌표 사용. {}", name, e.getMessage());
         }
 
         return locationRepository.save(Location.builder()
                 .name(name).address(realAddress).lat(lat).lng(lng).type(type)
-                .source(source)
-                .externalId(externalId)
-                .description(description)
+                .source(source).externalId(externalId).description(description)
                 .build());
+    }
+
+    private String getAccommodationTypeLabel(String countryCode, int score) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        if (isJp) {
+            if      (score >= 9) return "최고급 료칸·5성급";
+            else if (score >= 7) return "고급 호텔·부티크 료칸";
+            else if (score >= 4) return "비즈니스 호텔";
+            else if (score >= 2) return "저가 비즈니스·게스트하우스";
+            else                 return "캡슐호텔·도미토리";
+        } else {
+            if      (score >= 9) return "최고급 호텔·리조트";
+            else if (score >= 7) return "고급 호텔";
+            else if (score >= 4) return "일반 호텔";
+            else if (score >= 2) return "모텔·게스트하우스";
+            else                 return "저가 게스트하우스·도미토리";
+        }
+    }
+
+    private boolean containsAny(String input, String... keywords) {
+        for (String kw : keywords) {
+            if (input.contains(kw)) return true;
+        }
+        return false;
+    }
+
+    private Tendency parseTendency(String raw) {
+        try { return Tendency.valueOf(raw.toUpperCase()); }
+        catch (Exception e) { return Tendency.BALANCED; }
     }
 
     private LocationType parseLocationType(String raw) {
@@ -676,12 +860,5 @@ public class AiScheduleService {
     private Integer nodeIntOrNull(JsonNode node, String field) {
         JsonNode n = node.path(field);
         return (n.isMissingNode() || n.isNull()) ? null : n.asInt();
-    }
-
-    private String nullableText(JsonNode node, String field) {
-        JsonNode n = node.path(field);
-        if (n.isMissingNode() || n.isNull()) return null;
-        String text = n.asText("").trim();
-        return text.isEmpty() || "null".equalsIgnoreCase(text) ? null : text;
     }
 }

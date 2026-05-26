@@ -379,16 +379,37 @@ export default function TravelPlannerPage() {
             </div>
 
             {carRental && (
-              <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 10, padding: '8px 12px', border: '1px solid #A7F3D0' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#059669', marginBottom: 3 }}>🚗 렌트카</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{carRental.carType}</div>
-                    <div style={{ fontSize: '0.63rem', color: 'var(--text3)' }}>{carRental.dailyRateKrw?.toLocaleString()}원/일 × {carRental.rentalDays}일</div>
+              <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 10, padding: '10px 12px', border: '1px solid #A7F3D0' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#059669', marginBottom: 6 }}>🚗 렌트카 추천</div>
+                {/* 차종 이름 */}
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#064E3B', marginBottom: 4, wordBreak: 'keep-all' }}>
+                  {carRental.carType}
+                </div>
+                {/* 요금 세부 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.63rem' }}>
+                    <span style={{ color: '#6B7280' }}>렌탈료</span>
+                    <span style={{ fontWeight: 600, color: '#374151' }}>{(carRental.dailyRateKrw ?? 0).toLocaleString()}원 × {carRental.rentalDays}일</span>
                   </div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669' }}>
+                  {(carRental.estimatedFuelKrw ?? 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.63rem' }}>
+                      <span style={{ color: '#6B7280' }}>⛽ 연료비 (예상)</span>
+                      <span style={{ fontWeight: 600, color: '#374151' }}>{(carRental.estimatedFuelKrw ?? 0).toLocaleString()}원</span>
+                    </div>
+                  )}
+                  {(carRental.estimatedTollKrw ?? 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.63rem' }}>
+                      <span style={{ color: '#6B7280' }}>🛣️ 통행료 (예상)</span>
+                      <span style={{ fontWeight: 600, color: '#374151' }}>{(carRental.estimatedTollKrw ?? 0).toLocaleString()}원</span>
+                    </div>
+                  )}
+                </div>
+                {/* 합계 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #A7F3D0', paddingTop: 6 }}>
+                  <span style={{ fontSize: '0.63rem', color: '#6B7280' }}>렌트카 총액</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 900, color: '#059669' }}>
                     {((carRental.dailyRateKrw ?? 0) * (carRental.rentalDays ?? 0) + (carRental.estimatedFuelKrw ?? 0) + (carRental.estimatedTollKrw ?? 0)).toLocaleString()}원
-                  </div>
+                  </span>
                 </div>
               </div>
             )}

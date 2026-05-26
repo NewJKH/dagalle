@@ -385,13 +385,71 @@ public class AiScheduleService {
         return endLocation + " " + totalDays + "일 여행";
     }
 
-    /** 렌트카 단가 규칙 테이블 (Claude 없이 저장) */
+    /**
+     * 렌트카 차종·단가 추천 (인원수 + 숙박 등급 + 국가 기반)
+     *
+     * [JP] 경차/하이브리드 계열 — 일본 도로/주차 특성상 소형 유리
+     *   1~2명 절약형  → 다이하츠 무브 / 스즈키 허슬러 (경차)          50,000원/일
+     *   1~2명 일반형  → 토요타 아쿠아 / 혼다 핏 (소형 하이브리드)     70,000원/일
+     *   3~4명         → 토요타 프리우스 / 닛산 노트 (준중형 하이브리드) 90,000원/일
+     *   5명 이상       → 토요타 시에나 / 혼다 스텝왜건 (미니밴)        130,000원/일
+     *   고급형(acc≥8) → 토요타 알파드 / 렉서스 NX                    180,000원/일
+     *
+     * [KR] 국내 도로 특성 반영
+     *   1~2명 절약형  → 모닝 / 스파크 (경차)                         35,000원/일
+     *   1~2명 일반형  → 아반떼 / K3 (소형 세단)                      55,000원/일
+     *   3~4명         → 쏘나타 / K5 / 투싼 (중형·소형 SUV)           80,000원/일
+     *   5명 이상       → 카니발 / 팰리세이드 (대형 SUV·미니밴)       120,000원/일
+     *   고급형(acc≥8) → 그랜저 / 제네시스 GV80                      160,000원/일
+     */
     private void saveRentalCarByRule(TravelPlan travel, String countryCode, int totalDays) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
-        int dailyRate      = isJp ? 70_000 : 80_000;   // 엔→원 환산 or 원
-        int fuelPerDay     = isJp ? 18_000 : 30_000;
-        int tollPerDay     = isJp ?  5_000 : 10_000;
-        String carType     = isJp ? "경차/하이브리드" : "중형차";
+        boolean isJp    = "JP".equalsIgnoreCase(countryCode);
+        int members     = travel.getMemberCount() != null ? travel.getMemberCount() : 2;
+        int accScore    = travel.getAccommodationScore();
+        boolean luxury  = accScore >= 8;
+
+        String carType;
+        int dailyRate, fuelPerDay, tollPerDay;
+
+        if (isJp) {
+            fuelPerDay = 18_000;
+            tollPerDay =  5_000;
+            if (luxury) {
+                carType   = "토요타 알파드 / 렉서스 NX (프리미엄)";
+                dailyRate = 180_000;
+            } else if (members >= 5) {
+                carType   = "토요타 시에나 / 혼다 스텝왜건 (미니밴)";
+                dailyRate = 130_000;
+            } else if (members >= 3) {
+                carType   = "토요타 프리우스 / 닛산 노트 (준중형 하이브리드)";
+                dailyRate = 90_000;
+            } else if (accScore >= 5) {
+                carType   = "토요타 아쿠아 / 혼다 핏 (소형 하이브리드)";
+                dailyRate = 70_000;
+            } else {
+                carType   = "다이하츠 무브 / 스즈키 허슬러 (경차)";
+                dailyRate = 50_000;
+            }
+        } else {
+            fuelPerDay = 30_000;
+            tollPerDay = 10_000;
+            if (luxury) {
+                carType   = "그랜저 / 제네시스 GV80 (프리미엄)";
+                dailyRate = 160_000;
+            } else if (members >= 5) {
+                carType   = "카니발 / 팰리세이드 (대형 SUV·미니밴)";
+                dailyRate = 120_000;
+            } else if (members >= 3) {
+                carType   = "쏘나타 / K5 / 투싼 (중형·소형 SUV)";
+                dailyRate = 80_000;
+            } else if (accScore >= 5) {
+                carType   = "아반떼 / K3 (소형 세단)";
+                dailyRate = 55_000;
+            } else {
+                carType   = "모닝 / 스파크 (경차)";
+                dailyRate = 35_000;
+            }
+        }
 
         carRentalRepository.save(CarRental.builder()
                 .travelPlan(travel)
@@ -401,7 +459,8 @@ public class AiScheduleService {
                 .estimatedFuelKrw(fuelPerDay * totalDays)
                 .estimatedTollKrw(tollPerDay * totalDays)
                 .build());
-        log.info("[규칙] 렌트카 저장: {}원/일 × {}일", dailyRate, totalDays);
+        log.info("[규칙] 렌트카 추천: {} {}원/일 × {}일 ({}명, acc={})",
+                carType, dailyRate, totalDays, members, accScore);
     }
 
     /** 숙박 등급 → 단가 규칙 테이블 (Claude 없이 저장) */

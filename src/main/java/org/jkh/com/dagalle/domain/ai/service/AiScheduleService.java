@@ -280,6 +280,7 @@ public class AiScheduleService {
                 "야경·전망대: 전체 여행 최대 1회. 이미 다른 Day에 있으면 이 Day 추가 금지.\n" +
                 "장소 추가 시: 관광지뿐 아니라 먹거리 거리·마트·로컬카페·축제 등 일상적 장소도 적극 활용.\n" +
                 "동선: 인접 구역 묶음 배치. 왔다갔다 절대 금지.\n" +
+                "【숙박 규칙】마지막 날 제외 시 → 마지막 route의 toLocation.type='HOTEL' (실존 호텔명). 체크인 departureTime=20:00~21:00.\n" +
                 buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
     }
 
@@ -366,8 +367,8 @@ public class AiScheduleService {
             saveRentalCarByRule(travel, req.getCountryCode(), totalDays);
         }
 
-        // 숙박: 점수 기반 등급/단가 저장
-        saveAccommodationByRule(travel, req.getCountryCode(), req.getAccommodationScore(),
+        // 숙박: 1박 단위로 저장 (마지막날 제외 — 귀국일은 숙박 없음)
+        saveAccommodationPerNight(travel, req.getCountryCode(), req.getAccommodationScore(),
                 req.getStartDate(), req.getEndDate(), req.getEndLocation());
 
         log.info("[규칙] TravelPlan 생성 완료: title={}, travelId={}", title, travel.getId());
@@ -431,6 +432,50 @@ public class AiScheduleService {
                 .pricePerNightKrw(pricePerNight)
                 .build());
         log.info("[규칙] 숙박 저장: {} ({}원/박)", type, pricePerNight);
+    }
+
+    /**
+     * 1박 단위 숙박 저장 — 귀국일 전날까지 (마지막날은 숙박 없음).
+     * 숙소 위치는 AI가 실제 일정에서 결정하므로 여기선 등급·단가만 저장.
+     * 여행 중 이동이 있으면 AI가 날짜별로 다른 숙소를 route에 포함하고,
+     * 비용 계산에는 이 레코드들의 pricePerNightKrw 합산값 사용.
+     */
+    private void saveAccommodationPerNight(TravelPlan travel, String countryCode,
+                                           int accScore, LocalDate startDate, LocalDate endDate,
+                                           String location) {
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        int pricePerNight;
+        String type;
+
+        if (isJp) {
+            if      (accScore >= 9) { pricePerNight = 270_000; type = "최고급 료칸/5성급"; }
+            else if (accScore >= 7) { pricePerNight = 180_000; type = "고급 호텔/부티크 료칸"; }
+            else if (accScore >= 4) { pricePerNight = 110_000; type = "비즈니스 호텔"; }
+            else if (accScore >= 2) { pricePerNight =  54_000; type = "게스트하우스"; }
+            else                    { pricePerNight =  27_000; type = "캡슐호텔"; }
+        } else {
+            if      (accScore >= 9) { pricePerNight = 350_000; type = "최고급 호텔/리조트"; }
+            else if (accScore >= 7) { pricePerNight = 200_000; type = "고급 호텔"; }
+            else if (accScore >= 4) { pricePerNight = 120_000; type = "일반 호텔"; }
+            else if (accScore >= 2) { pricePerNight =  60_000; type = "모텔/게스트하우스"; }
+            else                    { pricePerNight =  30_000; type = "저가 게스트하우스"; }
+        }
+
+        // startDate 부터 endDate 전날까지 1박씩 저장
+        LocalDate night = startDate;
+        int nightNum = 1;
+        while (night.isBefore(endDate)) {
+            accommodationRepository.save(Accommodation.builder()
+                    .travelPlan(travel)
+                    .hotelName(location + " " + nightNum + "박차 " + type)
+                    .checkIn(night)
+                    .checkOut(night.plusDays(1))
+                    .pricePerNightKrw(pricePerNight)
+                    .build());
+            night = night.plusDays(1);
+            nightNum++;
+        }
+        log.info("[규칙] 숙박 {}박 저장: {} ({}원/박)", nightNum - 1, type, pricePerNight);
     }
 
     // ══════════════════════════════════════════════
@@ -700,7 +745,19 @@ public class AiScheduleService {
                 "- 야경·전망대: 전체 여행 최대 1회. 이미 앞 Day에 있으면 이 Day 절대 금지.\n" +
                 "- 온천: 하루 1회. 여러 날 반복 최소화.\n" +
                 "- 같은 이름 신사·관광지 중복 금지.\n" +
-                "- 전망대·산 정상: 전체 1회.";
+                "- 전망대·산 정상: 전체 1회.\n" +
+                "【숙박 규칙 — 절대 준수】\n" +
+                "1. 마지막 날(귀국일) 제외한 모든 Day의 마지막 route는 반드시 type=HOTEL인 숙소로 끝낼 것.\n" +
+                "   - toLocation.type = 'HOTEL', toLocation.name = 실존 호텔명 (예: '도미인 후쿠오카 하카타')\n" +
+                "   - 숙소는 그날 마지막 관광지 인근의 실존 호텔로 배치. Google Maps에서 실제 검색되는 호텔만.\n" +
+                "   - transport = WALK 또는 CAR (택시/버스 이동 포함). durationMinutes = 이동시간.\n" +
+                "   - 체크인 시각(departureTime)은 20:00~21:00 범위 내.\n" +
+                "2. 다음 날 첫 route의 fromLocation은 전날 숙박한 호텔과 동일한 장소로 시작.\n" +
+                "   - 즉 Day N의 마지막 toLocation(호텔) = Day N+1의 첫 fromLocation(동일 호텔).\n" +
+                "3. 여행 중 이동 지역이 바뀌면(예: 후쿠오카→벳푸→유후인) 날마다 다른 호텔 배치 허용.\n" +
+                "   - 여행 동선상 마지막 지점 인근 호텔을 그날 숙소로.\n" +
+                "4. 마지막 날은 호텔 체크아웃 route로 시작(fromLocation=전날 호텔, toLocation=첫 방문지, transport=WALK/CAR).\n" +
+                "5. 마지막 날 마지막 route = 여행지→공항 이동 (AIRPORT type).";
 
         String prefRules = buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
         return base + prefRules;
@@ -789,7 +846,14 @@ public class AiScheduleService {
                 "- 오전: 박물관·신사·먹거리거리·마트(10:00~). 오후: 쇼핑·산책·드럭스토어(14:00~).\n" +
                 "- 온천: 반드시 19:00 이후. 낮 온천 절대 금지.\n" +
                 "- 야경·야시장·루프탑·축제 야간: 19:00 이후. 전체 여행에서 야경 최대 1회.\n" +
-                "【중복 방지】 야경·전망대 전체 1회. 온천 하루 1곳. 같은 이름 관광지 중복 금지.";
+                "【중복 방지】 야경·전망대 전체 1회. 온천 하루 1곳. 같은 이름 관광지 중복 금지.\n" +
+                "【숙박 규칙 — 절대 준수】\n" +
+                "1. 마지막 날 제외한 모든 Day: 마지막 route의 toLocation.type='HOTEL', 실존 호텔명 사용.\n" +
+                "   체크인 departureTime = 20:00~21:00. transport=WALK 또는 CAR.\n" +
+                "2. 마지막 날이 아닌 경우: 이 Day의 마지막 toLocation이 그날 밤 숙소 호텔.\n" +
+                "   숙소는 당일 마지막 관광지 인근의 Google Maps 실존 호텔.\n" +
+                "3. 다음날 첫 fromLocation = 이 Day 마지막 toLocation(호텔)과 동일 장소.\n" +
+                "4. 이전날 마지막위치가 호텔이면 → 이 Day 첫 fromLocation = 그 호텔. 체크아웃 route로 시작.";
 
         return base + buildPrefSystemRules(countryCode, foodScore, accommodationScore, extremeScore, transportScore);
     }

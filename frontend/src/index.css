@@ -4,12 +4,12 @@
 html { scroll-behavior: smooth; }
 
 :root {
-  /* ─ Primary: 여기어때 코랄 계열 ─ */
-  --primary:     #FF5640;
-  --primary-dk:  #E03D28;
-  --primary-lt:  #FF7A68;
-  --primary-bg:  #FFF3F1;
-  --primary-pale:#FFE8E5;
+  /* ─ Primary: Klook 오렌지 계열 ─ */
+  --primary:     #FF5C00;
+  --primary-dk:  #E04E00;
+  --primary-lt:  #FF7A3D;
+  --primary-bg:  #FFF4EE;
+  --primary-pale:#FFE8DA;
 
   /* ─ Neutrals ─ */
   --black:   #1A1A1A;
@@ -38,9 +38,9 @@ html { scroll-behavior: smooth; }
   --sky-dk:    #0652DD;
   --sky-bg:    #EBF4FF;
   --sky-pale:  #D6EAFF;
-  --coral:     #FF5640;
-  --coral-lt:  #FF7A68;
-  --coral-bg:  #FFF3F1;
+  --coral:     #FF5C00;
+  --coral-lt:  #FF7A3D;
+  --coral-bg:  #FFF4EE;
   --mint:      #00B894;
   --mint-bg:   #E8FAF5;
   --amber-bg:  #FFFBEB;

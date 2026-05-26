@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { DEST_EMOJI, DEST_IMG } from '../constants/locations'
 import { useAuthFetch } from '../hooks/useAuthFetch'
@@ -25,13 +25,23 @@ function formatDate(str: string) {
   return `${y}.${m}.${d}`
 }
 
+interface PreFill {
+  destCity?: string
+  destCountry?: string
+  startDate?: string
+  endDate?: string
+  memberCount?: number
+}
+
 export default function TravelListPage() {
   const [plans, setPlans]       = useState<TravelPlan[]>([])
   const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [preFill, setPreFill]   = useState<PreFill>({})
   const [filter, setFilter]     = useState<'all' | 'upcoming' | 'completed'>('all')
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
   const navigate = useNavigate()
+  const location = useLocation()
   const authFetch = useAuthFetch()
 
   const handleDelete = async (id: number) => {
@@ -56,6 +66,28 @@ export default function TravelListPage() {
       .then(d => setPlans(Array.isArray(d.data) ? d.data : (d.data?.content ?? [])))
       .catch(() => setPlans([]))
       .finally(() => setLoading(false))
+
+    // 랜딩 페이지 검색에서 전달된 pre-fill 데이터 처리
+    const state = location.state as {
+      openCreate?: boolean
+      destCity?: string
+      destCountry?: string
+      startDate?: string
+      endDate?: string
+      memberCount?: number
+    } | null
+    if (state?.openCreate) {
+      setPreFill({
+        destCity:    state.destCity,
+        destCountry: state.destCountry,
+        startDate:   state.startDate,
+        endDate:     state.endDate,
+        memberCount: state.memberCount,
+      })
+      setShowCreate(true)
+      // 히스토리 state 초기화 (새로고침 시 재오픈 방지)
+      window.history.replaceState({}, '')
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -75,7 +107,7 @@ export default function TravelListPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1A1A1A', letterSpacing: '-0.02em' }}>내 여행 목록</h1>
-            <p style={{ fontSize: '0.82rem', color: '#999', marginTop: 4 }}>AI가 만들어준 나만의 여행 플랜</p>
+            <p style={{ fontSize: '0.82rem', color: '#999', marginTop: 4 }}>나만의 맞춤 여행 일정</p>
           </div>
           <button onClick={() => setShowCreate(true)} style={{
             display: 'flex', alignItems: 'center', gap: 7,
@@ -118,8 +150,9 @@ export default function TravelListPage() {
 
       {showCreate && (
         <CreateModal
-          onClose={() => setShowCreate(false)}
-          onCreated={plan => { setPlans(p => [plan, ...p]); setShowCreate(false); navigate(`/travels/${plan.id}`) }}
+          onClose={() => { setShowCreate(false); setPreFill({}) }}
+          onCreated={plan => { setPlans(p => [plan, ...p]); setShowCreate(false); setPreFill({}); navigate(`/travels/${plan.id}`) }}
+          preFill={preFill}
         />
       )}
 
@@ -169,7 +202,7 @@ function TravelCard({ plan, onClick, onDelete }: { plan: TravelPlan; onClick: ()
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#1A1A1A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{plan.title}</h3>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: st.bg, color: st.color, flexShrink: 0 }}>{st.label}</span>
-            {plan.isAiGenerated && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FFF3F1', color: 'var(--primary)', flexShrink: 0 }}>✨ AI</span>}
+            {plan.isAiGenerated && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FFF3F1', color: 'var(--primary)', flexShrink: 0 }}>큐레이션</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444' }}>{plan.startLocation} → {plan.endLocation}</span>
@@ -206,9 +239,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
     <div style={{ textAlign: 'center', padding: '80px 0', background: '#fff', borderRadius: 14, border: '1px solid #EBEBEB' }}>
       <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>✈️</div>
       <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1A1A1A', marginBottom: 8 }}>아직 여행 계획이 없어요</h3>
-      <p style={{ color: '#999', fontSize: '0.85rem', marginBottom: 24 }}>AI와 함께 첫 여행 계획을 세워볼까요?</p>
+      <p style={{ color: '#999', fontSize: '0.85rem', marginBottom: 24 }}>지금 바로 첫 여행 일정을 만들어볼까요?</p>
       <button onClick={onCreate} style={{ padding: '12px 28px', borderRadius: 10, fontSize: '0.9rem', fontWeight: 800, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 2px 10px rgba(255,86,64,0.3)' }}>
-        ✨ 첫 여행 만들기
+        + 첫 여행 만들기
       </button>
     </div>
   )
@@ -274,21 +307,30 @@ function calcNights(start: string, end: string): number {
 }
 
 /* ── 여행 생성 마법사 모달 ── */
-function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: TravelPlan) => void }) {
+function CreateModal({ onClose, onCreated, preFill = {} }: {
+  onClose: () => void
+  onCreated: (p: TravelPlan) => void
+  preFill?: PreFill
+}) {
   const authFetch = useAuthFetch()
   const today = new Date().toISOString().split('T')[0]
   const TOTAL_STEPS = 9 // 0..9 (step 9 = summary)
 
-  const [step, setStep] = useState(0)
+  // pre-fill에서 초기 상태 결정
+  const initCountry = preFill.destCountry === 'KR' ? 'KR' : 'JP'
+  const initCity    = preFill.destCity ?? ''
+  const initStep    = initCity ? 1 : 0   // 도시가 이미 있으면 날짜 스텝부터
+
+  const [step, setStep] = useState(initStep)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
   const [wizard, setWizard] = useState<WizardState>({
-    countryCode: 'JP',
-    endLocation: '',
-    startDate: '',
-    endDate: '',
-    memberCount: 2,
+    countryCode: initCountry,
+    endLocation: initCity,
+    startDate:   preFill.startDate  ?? '',
+    endDate:     preFill.endDate    ?? '',
+    memberCount: preFill.memberCount ?? 2,
     withCar: false,
     tendency: 'BALANCED',
     foodScore: 5,
@@ -766,9 +808,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           {step === 9 && (
             <div>
               <h2 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#1A1A1A', marginBottom: 6, letterSpacing: '-0.02em' }}>
-                이렇게 하면 어떨까요! ✨
+                여행 정보를 확인해주세요 🗺️
               </h2>
-              <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 20 }}>선택하신 내용을 확인해주세요</p>
+              <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 20 }}>선택하신 내용으로 일정을 만들어드립니다</p>
 
               {/* Summary card */}
               <div style={{
@@ -806,7 +848,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               >
                 {loading
                   ? <><span style={{ width: 16, height: 16, border: '2.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> 여행 만드는 중...</>
-                  : '✨ 이 일정으로 만들기!'}
+                  : '이 일정으로 만들기 →'}
               </button>
 
               <div style={{ textAlign: 'center' }}>

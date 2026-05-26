@@ -272,6 +272,11 @@ public class AiScheduleService {
                 "【실존 장소만】Google Maps 실제 검색되는 공식 명칭만 사용. 만들어낸 골목·거리 이름 절대 금지. 확신 없는 장소는 유명한 다른 장소로 대체.\n" +
                 "【장소명 형식】한국어/발음 먼저, 괄호 안에 현지어. 예: '스프카레 가라쿠 (スープカレーGARAKU)'. 영어 브랜드명은 그대로.\n" +
                 (isJp ? "CAR비용=엔×9원." : "원화.") + "\n" +
+                "【공항·렌트카 이동 규칙 — 수정 시에도 유지】\n" +
+                "- 공항↔도시 이동: 반드시 TRAIN 또는 BUS. CAR 사용 절대 금지.\n" +
+                "- 렌트카 허브-앤-스포크: 호텔(CAR) → 관광지구 주차장(ETC) → 관광지들(WALK) → 주차장(WALK) → 호텔(CAR).\n" +
+                "- 관광지구 내부 500m 이내: WALK만 허용. CAR 금지.\n" +
+                "- 마지막날 렌트카 반납 후: 렌트카 영업소(ETC) → 공항(TRAIN/BUS) 순서.\n" +
                 "【수정 규칙 — 최우선 준수】\n" +
                 "1. 사용자 요청사항만 변경. 요청하지 않은 route는 장소명·좌표·시간 그대로 유지.\n" +
                 "2. 장소 추가 시 → 기존 동선 흐름(지리적 방향)에 자연스럽게 삽입. 왔다갔다 금지.\n" +
@@ -291,7 +296,9 @@ public class AiScheduleService {
     private String buildModifyUserMessage(TravelPlan travel, int dayNumber, LocalDate date,
                                           String currentJson, String userPrompt) {
         int totalDays = (int) daysBetween(travel.getStartDate(), travel.getEndDate());
-        String transport = travel.isWithCar() ? "렌트카(CAR/WALK)" : "대중교통(SUBWAY/BUS/TRAIN/WALK)";
+        String transport = travel.isWithCar()
+                ? "렌트카(공항=TRAIN/BUS, 지역간=CAR, 관광지내=WALK, 구역간반납포함)"
+                : "대중교통(공항=TRAIN/BUS, 도심=SUBWAY/BUS, 근거리=WALK)";
         return String.format(
                 "여행지:%s | %d일차/%d일 | %s | 이동:%s\n" +
                 "【현재 %d일차 일정】\n%s\n" +
@@ -759,7 +766,28 @@ public class AiScheduleService {
                 "- 로컬 카페·빵집: 구글 지도에 실제 등록된 곳, 지점명 정확히 기재\n" +
                 "- 산책로·강변: 실제 명칭 있는 곳만 (예: 철학의 길(哲学の道), 아라시야마 대나무숲(竹林の小径))\n" +
                 "하루 일정에 박물관·신사·성만 나열 금지.\n" +
-                "교통: WALK=1km이하/도보15분이내, CAR=3km초과, BUS/TRAIN=도시간이동. WALK 하루 최소1구간.\n" +
+                "교통: WALK=1km이하/도보15분이내, CAR=3km초과 지역간 이동, BUS/TRAIN=도시간·공항이동. WALK 하루 최소1구간.\n" +
+                "【공항 이동 — 절대 규칙】\n" +
+                (isJp
+                    ? "- 일본 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
+                      "  * 나리타→도쿄: 나리타 익스프레스(NEX) TRAIN 60분. * 간사이→오사카: 하루카 특급 TRAIN 75분.\n" +
+                      "  * 후쿠오카 공항→하카타역: 지하철(SUBWAY) 5분. * 삿포로→신치토세: JR 특급 TRAIN 40분.\n" +
+                      "  * 그 외 공항: 리무진버스(BUS) 40~90분.\n"
+                    : "- 한국 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
+                      "  * 인천공항→서울: 공항철도(AREX) TRAIN 45분 또는 공항리무진버스 BUS 60분.\n" +
+                      "  * 김포공항→도심: 지하철(SUBWAY) 30분. * 제주공항→시내: 버스(BUS) 30분.\n") +
+                "【렌트카 운행 패턴 — withCar=true일 때만 적용】\n" +
+                "- Day1: 공항 도착 → TRAIN/BUS로 도시 이동 → 도시 내 렌트카 영업소 또는 다음날 아침 픽업.\n" +
+                "  (공항에서 바로 렌트카 픽업 후 고속도로 이동은 허용, 단 공항→도시 자체는 공항까지 포함된 고속도로 경로로 처리)\n" +
+                "- 렌트카 허브-앤-스포크 패턴:\n" +
+                "  1) 호텔(CAR출발) → 관광지구 주차장(ETC, 주차, 10~15분) → 관광지A(WALK) → 관광지B(WALK) → 관광지C(WALK) → 주차장(WALK 귀환)\n" +
+                "  2) 다음 관광지구로 이동: 주차장(CAR) → 다음 관광지구 주차장(CAR)\n" +
+                "  3) 저녁: 마지막 주차장(CAR) → 호텔(CAR)\n" +
+                "- 관광지구 내부(500m 이내) 이동은 반드시 WALK. 같은 구역 내에서 CAR 사용 금지.\n" +
+                "- 걸어서 다닌 구역에서 호텔로 돌아올 때도 반드시 주차장(WALK) → 호텔(CAR) 순서.\n" +
+                "  즉 WALK로 나간 곳에서 갑자기 CAR로 귀환하는 route 금지 — 주차장 경유 필수.\n" +
+                "- 마지막날: 호텔 체크아웃(CAR) → 렌트카 반납 영업소(ETC, 15~20분) → 공항(TRAIN/BUS).\n" +
+                "  공항까지 CAR로 직행 금지 — 반납 후 TRAIN/BUS 이용.\n" +
                 "동선 최적화 규칙(최우선):\n" +
                 "- 하루 방문 장소는 지리적으로 인접한 구역끼리 묶어서 순서 배치. 절대 왔다갔다(A→B→A 방향) 금지.\n" +
                 "- 직선 이동 원칙: 하루 동선은 한 방향(북→남, 서→동 등)으로 흐르거나 루프(원형 귀환) 형태.\n" +
@@ -827,8 +855,8 @@ public class AiScheduleService {
 
     private String buildAllDaysUserMessage(TravelPlan travel, AiGenerateRequest req, int totalDays) {
         String transport = travel.isWithCar()
-                ? "렌트카(장거리CAR, 근거리/관광지내WALK)"
-                : "대중교통(SUBWAY/BUS/TRAIN, 도보가능거리WALK)";
+                ? "렌트카(공항↔도시=TRAIN/BUS필수, 지역간=CAR, 관광지구내=WALK, 마지막날반납후=TRAIN/BUS)"
+                : "대중교통(공항↔도시=TRAIN/BUS, 도심=SUBWAY/BUS, 근거리=WALK)";
 
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(
@@ -843,10 +871,10 @@ public class AiScheduleService {
 
         // 항공편 힌트
         if (req.getArrivalAtDestTime() != null) {
-            sb.append(String.format("Day1: 현지공항 도착 %s → %s로 이동 포함.\n",
+            sb.append(String.format("Day1: 현지공항 도착 %s → TRAIN/BUS로 %s 이동 포함(CAR 금지).\n",
                     req.getArrivalAtDestTime(), travel.getEndLocation()));
         } else {
-            sb.append(String.format("Day1: 첫route=도착공항→%s 이동 포함.\n", travel.getEndLocation()));
+            sb.append(String.format("Day1: 첫route=도착공항→%s TRAIN/BUS 이동 포함(CAR 금지).\n", travel.getEndLocation()));
         }
         if (req.getReturnFlightTime() != null) {
             sb.append(String.format("마지막날: %s 이전 공항 도착. 마지막route=%s→공항.\n",
@@ -891,11 +919,23 @@ public class AiScheduleService {
                 "- 구글 지도 등록 카페·빵집(지점명 정확히)\n" +
                 "- 공식 명칭 있는 산책로(철학의 길, 아라시야마 대나무숲 등)\n" +
                 "박물관·신사·성만 나열 금지.\n" +
-                "교통: WALK=1km이하/15분이내, CAR=3km초과, BUS/TRAIN=도시간. WALK 최소1구간.\n" +
+                "교통: WALK=1km이하/15분이내, CAR=3km초과 지역간 이동, BUS/TRAIN=도시간·공항이동. WALK 최소1구간.\n" +
+                "【공항 이동 — 절대 규칙】\n" +
+                (isJp
+                    ? "- 일본 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
+                      "  나리타→도쿄: NEX TRAIN 60분. 간사이→오사카: 하루카 TRAIN 75분.\n" +
+                      "  후쿠오카 공항→하카타역: 지하철 SUBWAY 5분. 삿포로↔신치토세: JR TRAIN 40분.\n"
+                    : "- 한국 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
+                      "  인천공항→서울: 공항철도 TRAIN 45분 또는 버스 BUS 60분. 김포공항→도심: SUBWAY 30분.\n") +
+                "【렌트카 운행 패턴 — withCar=true일 때만】\n" +
+                "- 허브-앤-스포크: 호텔(CAR) → 관광지구 주차장(ETC) → 관광지들(WALK) → 주차장(WALK) → 다음 지구(CAR) → 호텔(CAR).\n" +
+                "- 관광지구 내부 500m 이내 이동은 WALK만. 같은 구역에서 CAR 금지.\n" +
+                "- WALK로 나간 구역에서 호텔 귀환 시: 반드시 주차장(WALK 귀환) → 호텔(CAR) 순서.\n" +
+                "- 마지막날 렌트카: 호텔(CAR) → 렌트카 반납 영업소(ETC, 15~20분) → 공항(TRAIN/BUS).\n" +
                 "동선 최적화(최우선): 인접 구역 묶어서 배치. 왔다갔다 절대 금지. 숙소 인근 출발·귀환.\n" +
                 "CAR: 정체 여유 포함(시내+10분, 고속도로+15분). 3시간 초과 시 휴게소 route 추가(ETC, 20분).\n" +
                 "description: RESTAURANT/CAFE=대표메뉴+가격대. 마트·상점가=살 수 있는 품목·가격대. 축제=볼거리·주의사항.\n" +
-                "Day1첫route=공항→여행지. 마지막날마지막route=여행지→공항.\n" +
+                "Day1첫route=공항→여행지(TRAIN/BUS). 마지막날마지막route=여행지→공항(TRAIN/BUS).\n" +
                 "【체류시간】\n" +
                 "- 공항: 입국 60분. 호텔 체크인 20~30분. 역 5~10분.\n" +
                 "- 아침식사 30~45분. 점심 50~70분. 저녁 70~90분. 이자카야/코스 90~120분.\n" +
@@ -925,8 +965,8 @@ public class AiScheduleService {
                                        String accommodationHint, String flightHint,
                                        boolean nightviewUsed) {
         String transport = travel.isWithCar()
-                ? "렌트카(장거리CAR, 근거리WALK)"
-                : "대중교통(SUBWAY/BUS/TRAIN, 도보WALK)";
+                ? "렌트카(공항↔도시=TRAIN/BUS필수, 지역간=CAR, 관광지내=WALK)"
+                : "대중교통(공항↔도시=TRAIN/BUS, 도심=SUBWAY/BUS, 근거리=WALK)";
         String nightviewNote = nightviewUsed
                 ? "⚠️ 이미 이전 Day에 야경·전망대 포함됨 → 이 Day에는 야경·전망대 절대 배치 금지."
                 : "야경·전망대는 전체 여행에서 딱 1회 — 이번이 처음이면 넣어도 되나 반드시 19:00 이후.";

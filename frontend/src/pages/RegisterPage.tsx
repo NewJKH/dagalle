@@ -32,7 +32,20 @@ export default function RegisterPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message || '회원가입에 실패했습니다.'); return }
-      navigate('/login')
+      // 가입 성공 → 자동 로그인
+      const loginRes = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email, password: form.password }),
+      })
+      const loginData = await loginRes.json()
+      if (loginRes.ok && loginData.data?.accessToken) {
+        localStorage.setItem('accessToken', loginData.data.accessToken)
+        localStorage.setItem('refreshToken', loginData.data.refreshToken)
+        navigate('/travels')
+      } else {
+        navigate('/login')
+      }
     } catch {
       setError('서버에 연결할 수 없습니다.')
     } finally {

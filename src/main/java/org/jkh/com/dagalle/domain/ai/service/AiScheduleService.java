@@ -45,6 +45,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -1076,6 +1077,15 @@ public class AiScheduleService {
                         ? hit.placeId()
                         : "google-" + name.replaceAll("\\s+", "-") + "-" + date;
                 log.info("[Places] '{}' → ({}, {}) placeId={}", name, lat, lng, hit.placeId());
+
+                // 이미 동일한 placeId로 저장된 장소가 있으면 재사용 (중복 방지)
+                if (hit.placeId() != null && !hit.placeId().isBlank()) {
+                    Optional<Location> existing = locationRepository.findByExternalIdAndSource(hit.placeId(), LocationSource.GOOGLE);
+                    if (existing.isPresent()) {
+                        log.info("[Places] '{}' 기존 Location 재사용 id={}", name, existing.get().getId());
+                        return existing.get();
+                    }
+                }
             } else {
                 // 구글에서 찾지 못한 장소 — AI가 만들어낸 가능성이 높음
                 // description에 경고 표시, 이름 앞에 마커 추가

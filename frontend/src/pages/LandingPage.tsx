@@ -509,7 +509,7 @@ export default function LandingPage() {
                   🗓️ {it.nights}박{it.days}일
                 </div>
                 <div style={{ position: 'absolute', top: 12, right: 12, background: 'var(--primary)', color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: '0.7rem', fontWeight: 700 }}>
-                  🇯🇵 일본
+                  {it.countryCode === 'JP' ? '🇯🇵 일본' : it.countryCode === 'KR' ? '🇰🇷 국내' : '🌏 해외'}
                 </div>
                 <div style={{ position: 'absolute', bottom: 12, left: 14, right: 14 }}>
                   <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.01em', lineHeight: 1.3 }}>{it.title}</div>

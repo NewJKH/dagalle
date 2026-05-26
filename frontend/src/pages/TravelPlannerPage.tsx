@@ -330,13 +330,17 @@ export default function TravelPlannerPage() {
                 <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--purple)', marginBottom: 3 }}>🏨 숙박</div>
                 {accommodations.map(acc => {
                   const nights = Math.round((new Date(acc.checkOut).getTime() - new Date(acc.checkIn).getTime()) / 86400000)
+                  // "N박차 비즈니스 호텔" 형식에서 호텔명 추출 (숫자박차 패턴 제거)
+                  const cleanName = acc.hotelName.replace(/\s*\d+박차\s*/, ' ').trim()
+                  const checkInDate = new Date(acc.checkIn)
+                  const label = checkInDate.toLocaleDateString('ko', { month: 'short', day: 'numeric', weekday: 'short' })
                   return (
-                    <div key={acc.id} style={{ marginBottom: 4 }}>
+                    <div key={acc.id} style={{ marginBottom: 5, paddingBottom: 5, borderBottom: '1px dashed #DDD6FE' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ fontSize: '0.76rem', fontWeight: 600, flex: 1, marginRight: 6 }}>{acc.hotelName}</div>
-                        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--purple)', flexShrink: 0 }}>{((acc.pricePerNightKrw ?? 0) * nights).toLocaleString()}원</div>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 600, flex: 1, marginRight: 6, color: '#4C1D95' }}>{cleanName}</div>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--purple)', flexShrink: 0 }}>{((acc.pricePerNightKrw ?? 0) * nights).toLocaleString()}원</div>
                       </div>
-                      <div style={{ fontSize: '0.62rem', color: 'var(--text3)' }}>{acc.checkIn} ~ {acc.checkOut} ({nights}박)</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text3)', marginTop: 1 }}>📅 {label} · {nights}박</div>
                     </div>
                   )
                 })}
@@ -439,13 +443,16 @@ export default function TravelPlannerPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, background: 'var(--sky)', color: '#fff', padding: '3px 10px', borderRadius: 6 }}>DAY {selectedDay}</div>
                 <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text)' }}>
-                  {currentDay?.date ?? '—'}
+                  {currentDay?.date
+                    ? new Date(currentDay.date).toLocaleDateString('ko', { month: 'long', day: 'numeric', weekday: 'short' })
+                    : '—'}
                 </h2>
               </div>
               {currentDay && (
                 <p style={{ fontSize: '0.82rem', color: 'var(--text3)' }}>
                   경로 {currentDay.routes.length}개 ·
                   예상 {currentDay.routes.reduce((s, r) => s + r.estimatedCost, 0).toLocaleString()}원
+                  {selectedDay < (travel?.totalDays ?? 1) ? ` · ${selectedDay}/${travel?.totalDays ?? 1}일차` : ' · 마지막 날 🏁'}
                 </p>
               )}
             </div>
@@ -680,16 +687,18 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
 
               {/* 정보 */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.95rem', color: place.loc.name.startsWith('⚠️') ? '#B45309' : 'var(--text)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.95rem', color: place.loc.name.startsWith('⚠️') ? '#B45309' : 'var(--text)', lineHeight: 1.35, wordBreak: 'keep-all' }}>
                     {place.loc.name}
                   </span>
-                  <span style={{ fontSize: '0.65rem', padding: '2px 7px', borderRadius: 20, background: locBg, color: locColor, fontWeight: 700, border: `1px solid ${locColor}30` }}>{type}</span>
-                  {place.loc.name.startsWith('⚠️') && (
-                    <span style={{ fontSize: '0.62rem', background: '#FEF3C7', color: '#92400E', padding: '2px 7px', borderRadius: 4, border: '1px solid #FDE68A', fontWeight: 700 }}>
-                      구글 미확인
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.65rem', padding: '2px 7px', borderRadius: 20, background: locBg, color: locColor, fontWeight: 700, border: `1px solid ${locColor}30`, flexShrink: 0 }}>{type}</span>
+                    {place.loc.name.startsWith('⚠️') && (
+                      <span style={{ fontSize: '0.62rem', background: '#FEF3C7', color: '#92400E', padding: '2px 7px', borderRadius: 4, border: '1px solid #FDE68A', fontWeight: 700, flexShrink: 0 }}>
+                        구글 미확인
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* 도착 시간 + 체류 */}

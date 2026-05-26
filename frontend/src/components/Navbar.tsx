@@ -52,11 +52,16 @@ export default function Navbar() {
 
         {/* 중앙 메뉴 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {[['국내여행', '#'], ['해외여행', '#'], ['AI 일정', '#'], ['팀 여행', '#']].map(([label, href]) => (
+          {([
+            ['✈️ 일본 여행', '/?dest=JP'],
+            ['🇰🇷 국내 여행', '/?dest=KR'],
+            ['📋 추천 일정', '/#sample-itineraries'],
+            ['💰 비용 계산', '/travels'],
+          ] as const).map(([label, href]) => (
             <a key={label} href={href} style={{
-              padding: '6px 14px', borderRadius: 6, fontSize: '0.875rem', fontWeight: 500,
+              padding: '6px 14px', borderRadius: 6, fontSize: '0.82rem', fontWeight: 600,
               color: solid ? '#444' : 'rgba(255,255,255,0.88)',
-              transition: 'all 0.15s',
+              transition: 'all 0.15s', textDecoration: 'none',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = solid ? '#F5F5F5' : 'rgba(255,255,255,0.12)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}

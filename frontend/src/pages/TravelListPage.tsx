@@ -265,6 +265,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
   const goNext = () => setStep(s => Math.min(s + 1, TOTAL_STEPS))
   const goBack = () => setStep(s => Math.max(s - 1, 0))
+  // 선택 후 자동으로 다음 단계로 (스무고개 느낌)
+  const autoNext = (delay = 280) => setTimeout(() => setStep(s => Math.min(s + 1, TOTAL_STEPS)), delay)
 
   const handleSubmit = async () => {
     setLoading(true)
@@ -376,26 +378,36 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </div>
 
         {/* Header row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px 0', flexShrink: 0,
-        }}>
-          {step > 0 ? (
-            <button
-              onClick={goBack}
-              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '1rem', color: '#666' }}
-            >←</button>
-          ) : (
-            <div style={{ width: 32 }} />
-          )}
-          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#BBB' }}>
-            {step < TOTAL_STEPS ? `${step + 1} / ${TOTAL_STEPS}` : '완성!'}
-          </span>
-          <button
-            onClick={onClose}
-            style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#888' }}
-          >✕</button>
-        </div>
+        {(() => {
+          const STEP_LABELS = ['목적지','날짜','인원','렌트카','활동량','맛집','문화','숙박','액티비티','요약']
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px 20px 0', flexShrink: 0,
+            }}>
+              {step > 0 ? (
+                <button
+                  onClick={goBack}
+                  style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '1rem', color: '#666' }}
+                >←</button>
+              ) : (
+                <div style={{ width: 32 }} />
+              )}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: step < TOTAL_STEPS ? 'var(--primary)' : '#059669' }}>
+                  {step < TOTAL_STEPS ? STEP_LABELS[step] : '완성!'}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#CCC', marginTop: 1 }}>
+                  {step < TOTAL_STEPS ? `${step + 1} / ${TOTAL_STEPS}` : '🎉'}
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E0E0E0', background: '#FAFAFA', cursor: 'pointer', fontSize: '0.9rem', color: '#888' }}
+              >✕</button>
+            </div>
+          )
+        })()}
 
         {/* Scrollable content */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px 28px' }}>
@@ -423,35 +435,26 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </div>
 
               {/* 도시 그리드 */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 24 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 8 }}>
                 {cities.map(city => {
                   const sel = wizard.endLocation === city
                   return (
                     <button key={city} type="button"
-                      onClick={() => setWizard(w => ({ ...w, endLocation: city }))}
+                      onClick={() => {
+                        setWizard(w => ({ ...w, endLocation: city }))
+                        autoNext(320)
+                      }}
                       style={{
-                        padding: '10px 6px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem',
+                        padding: '12px 6px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
                         border: sel ? '2px solid var(--primary)' : '1.5px solid #EBEBEB',
                         background: sel ? '#FFF3F1' : '#FAFAFA',
-                        color: sel ? 'var(--primary)' : '#444', transition: 'all 0.12s',
+                        color: sel ? 'var(--primary)' : '#444', transition: 'all 0.15s',
+                        boxShadow: sel ? '0 2px 8px rgba(255,86,64,0.2)' : 'none',
                       }}>{DEST_EMOJI[city] ?? '📍'} {city}</button>
                   )
                 })}
               </div>
-
-              <button
-                disabled={!wizard.endLocation}
-                onClick={() => wizard.endLocation && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: wizard.endLocation ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  boxShadow: wizard.endLocation ? '0 4px 14px rgba(255,86,64,0.35)' : 'none',
-                  cursor: wizard.endLocation ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
-                }}
-              >
-                {wizard.endLocation ? `${DEST_EMOJI[wizard.endLocation] ?? '✈️'} ${wizard.endLocation} 선택 →` : '도시를 선택하세요'}
-              </button>
+              <p style={{ fontSize: '0.72rem', color: '#CCC', textAlign: 'center', marginTop: 4 }}>도시를 선택하면 자동으로 넘어가요</p>
             </div>
           )}
 
@@ -515,7 +518,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   const sel = wizard.memberCount === m.count
                   return (
                     <button key={m.count} type="button"
-                      onClick={() => setWizard(w => ({ ...w, memberCount: m.count }))}
+                      onClick={() => { setWizard(w => ({ ...w, memberCount: m.count })); autoNext() }}
                       style={sel ? tileSelected : tileBase}
                     >
                       <div style={{ fontSize: '1.6rem', marginBottom: 6 }}>{m.icon}</div>
@@ -525,10 +528,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   )
                 })}
               </div>
-
-              <button onClick={goNext} style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>
-                다음 →
-              </button>
             </div>
           )}
 
@@ -540,7 +539,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 28 }}>렌트카면 더 자유로운 동선으로 일정을 짤 수 있어요</p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
                 {PILL_OPTIONS.map(opt => {
                   const sel = carAnswer === opt.key
                   return (
@@ -548,23 +547,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                       onClick={() => {
                         setCarAnswer(opt.key)
                         setWizard(w => ({ ...w, withCar: opt.key === 'yes' }))
+                        autoNext()
                       }}
                       style={sel ? pillSelected : pillBase}
                     >{opt.label}</button>
                   )
                 })}
               </div>
-
-              <button
-                disabled={carAnswer === null}
-                onClick={() => carAnswer !== null && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: carAnswer !== null ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  cursor: carAnswer !== null ? 'pointer' : 'not-allowed',
-                }}
-              >다음 →</button>
+              <p style={{ fontSize: '0.72rem', color: '#CCC', textAlign: 'center', marginBottom: 8 }}>선택하면 자동으로 다음으로 넘어가요</p>
             </div>
           )}
 
@@ -578,7 +568,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 28 }}>여행 스타일에 맞게 일정 밀도를 조정해요</p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
                 {PILL_OPTIONS.map(opt => {
                   const sel = activityAnswer === opt.key
                   return (
@@ -589,23 +579,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                           ...w,
                           tendency: opt.key === 'yes' ? 'ACTIVE' : opt.key === 'no' ? 'RELAX' : 'BALANCED',
                         }))
+                        autoNext()
                       }}
                       style={sel ? pillSelected : pillBase}
                     >{opt.label}</button>
                   )
                 })}
               </div>
-
-              <button
-                disabled={activityAnswer === null}
-                onClick={() => activityAnswer !== null && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: activityAnswer !== null ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  cursor: activityAnswer !== null ? 'pointer' : 'not-allowed',
-                }}
-              >다음 →</button>
+              <p style={{ fontSize: '0.72rem', color: '#CCC', textAlign: 'center', marginBottom: 8 }}>선택하면 자동으로 다음으로 넘어가요</p>
             </div>
           )}
 
@@ -617,7 +598,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 28 }}>음식 중심의 여행을 원하시면 현지 맛집 위주로 일정을 짤게요</p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
                 {PILL_OPTIONS.map(opt => {
                   const sel = foodAnswer === opt.key
                   return (
@@ -628,23 +609,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                           ...w,
                           foodScore: opt.key === 'yes' ? 9 : opt.key === 'no' ? 3 : 5,
                         }))
+                        autoNext()
                       }}
                       style={sel ? pillSelected : pillBase}
                     >{opt.label}</button>
                   )
                 })}
               </div>
-
-              <button
-                disabled={foodAnswer === null}
-                onClick={() => foodAnswer !== null && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: foodAnswer !== null ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  cursor: foodAnswer !== null ? 'pointer' : 'not-allowed',
-                }}
-              >다음 →</button>
+              <p style={{ fontSize: '0.72rem', color: '#CCC', textAlign: 'center', marginBottom: 8 }}>선택하면 자동으로 다음으로 넘어가요</p>
             </div>
           )}
 
@@ -656,7 +628,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 28 }}>문화·역사 명소 중심 vs 로컬 체험·상점가 위주를 선택해주세요</p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
                 {PILL_OPTIONS.map(opt => {
                   const sel = cultureAnswer === opt.key
                   return (
@@ -669,23 +641,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                           else if (opt.key === 'no') kws.push('로컬체험')
                           return { ...w, keywords: kws }
                         })
+                        autoNext()
                       }}
                       style={sel ? pillSelected : pillBase}
                     >{opt.label}</button>
                   )
                 })}
               </div>
-
-              <button
-                disabled={cultureAnswer === null}
-                onClick={() => cultureAnswer !== null && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: cultureAnswer !== null ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  cursor: cultureAnswer !== null ? 'pointer' : 'not-allowed',
-                }}
-              >다음 →</button>
+              <p style={{ fontSize: '0.72rem', color: '#CCC', textAlign: 'center', marginBottom: 8 }}>선택하면 자동으로 다음으로 넘어가요</p>
             </div>
           )}
 
@@ -705,6 +668,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                       onClick={() => {
                         setAccomScore(a.score)
                         setWizard(w => ({ ...w, accommodationScore: a.score }))
+                        autoNext()
                       }}
                       style={sel ? tileSelected : tileBase}
                     >
@@ -715,17 +679,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   )
                 })}
               </div>
-
-              <button
-                disabled={accomScore === null}
-                onClick={() => accomScore !== null && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: accomScore !== null ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  cursor: accomScore !== null ? 'pointer' : 'not-allowed',
-                }}
-              >다음 →</button>
             </div>
           )}
 
@@ -737,7 +690,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#888', marginBottom: 28 }}>익스트림 활동을 일정에 포함할지 결정해요</p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
                 {PILL_OPTIONS.map(opt => {
                   const sel = adventureAnswer === opt.key
                   return (
@@ -748,23 +701,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                           ...w,
                           extremeScore: opt.key === 'yes' ? 9 : opt.key === 'no' ? 1 : 4,
                         }))
+                        autoNext()
                       }}
                       style={sel ? pillSelected : pillBase}
                     >{opt.label}</button>
                   )
                 })}
               </div>
-
-              <button
-                disabled={adventureAnswer === null}
-                onClick={() => adventureAnswer !== null && goNext()}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 800,
-                  background: adventureAnswer !== null ? 'var(--primary)' : '#E0E0E0',
-                  color: '#fff', border: 'none',
-                  cursor: adventureAnswer !== null ? 'pointer' : 'not-allowed',
-                }}
-              >다음 →</button>
+              <p style={{ fontSize: '0.72rem', color: '#CCC', textAlign: 'center', marginBottom: 8 }}>선택하면 자동으로 다음으로 넘어가요</p>
             </div>
           )}
 

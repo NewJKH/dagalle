@@ -263,8 +263,8 @@ export default function LandingPage() {
         {/* 배경 사진 */}
         <div style={{
           position: 'absolute', inset: 0,
-          backgroundImage: 'url(https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1600&q=80)',
-          backgroundSize: 'cover', backgroundPosition: 'center top',
+          backgroundImage: 'url(https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1600&q=80)',
+          backgroundSize: 'cover', backgroundPosition: 'center center',
           zIndex: 0,
         }} />
         {/* 플랫 화이트 오버레이 (그라디언트 없음) */}

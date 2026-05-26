@@ -259,8 +259,17 @@ export default function LandingPage() {
       <Navbar />
 
       {/* ── HERO ── */}
-      <section style={{ background: '#fff', padding: '96px 32px 72px' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
+      <section style={{ position: 'relative', padding: '96px 32px 72px', overflow: 'hidden', background: '#d0e8f7' }}>
+        {/* 배경 사진 */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'url(https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1600&q=80)',
+          backgroundSize: 'cover', backgroundPosition: 'center top',
+          zIndex: 0,
+        }} />
+        {/* 플랫 화이트 오버레이 (그라디언트 없음) */}
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.62)', zIndex: 1 }} />
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
 
           {/* 타이틀 */}
           <h1 style={{ fontSize: 'clamp(2.2rem, 5vw, 3.8rem)', fontWeight: 900, color: '#1A1A1A', lineHeight: 1.15, letterSpacing: '-0.04em', marginBottom: 16 }}>

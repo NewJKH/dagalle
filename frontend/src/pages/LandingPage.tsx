@@ -20,10 +20,10 @@ const POPULAR = [
 ]
 
 const FEATURES = [
-  { icon: '📍', title: '검증된 현지 코스', desc: '현지 여행자 데이터를 기반으로 동선·시간·비용까지 최적화된 맞춤 일정을 제공해요', gradient: 'linear-gradient(135deg, #667EEA, #764BA2)' },
-  { icon: '🗺️', title: '지도로 한눈에',   desc: 'Day별 동선이 지도에 표시되고, 구글 스트리트뷰로 장소를 미리 살펴볼 수 있어요', gradient: 'linear-gradient(135deg, #11998E, #38EF7D)' },
-  { icon: '✏️', title: '자유로운 수정',   desc: '마음에 안 드는 구간은 언제든 원하는 대로 수정할 수 있어요. 장소 추가·교체도 자유롭게', gradient: 'linear-gradient(135deg, #F7971E, #FFD200)' },
-  { icon: '💰', title: '투명한 비용 계산', desc: '항공료·렌트카·숙박·현지 교통비까지 1인/팀 전체 예상 비용을 한눈에 확인해요', gradient: 'linear-gradient(135deg, #F953C6, #B91D73)' },
+  { icon: '📍', title: '검증된 현지 코스', desc: '현지 여행자 데이터를 기반으로 동선·시간·비용까지 최적화된 맞춤 일정을 제공해요', bg: '#FFF0E8' },
+  { icon: '🗺️', title: '지도로 한눈에',   desc: 'Day별 동선이 지도에 표시되고, 구글 스트리트뷰로 장소를 미리 살펴볼 수 있어요', bg: '#E8F5F0' },
+  { icon: '✏️', title: '자유로운 수정',   desc: '마음에 안 드는 구간은 언제든 원하는 대로 수정할 수 있어요. 장소 추가·교체도 자유롭게', bg: '#FFF8E8' },
+  { icon: '💰', title: '투명한 비용 계산', desc: '항공료·렌트카·숙박·현지 교통비까지 1인/팀 전체 예상 비용을 한눈에 확인해요', bg: '#F0EEFF' },
 ]
 
 const STATS = [
@@ -100,7 +100,7 @@ function SampleModal({ itinerary, onClose }: { itinerary: SampleItinerary; onClo
         {/* 헤더 이미지 */}
         <div style={{ position: 'relative', height: 180, flexShrink: 0, overflow: 'hidden' }}>
           <img src={itinerary.imageUrl} alt={itinerary.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }} />
           <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           <div style={{ position: 'absolute', bottom: 16, left: 20, right: 20 }}>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -140,7 +140,7 @@ function SampleModal({ itinerary, onClose }: { itinerary: SampleItinerary; onClo
         <div style={{ padding: '12px 20px', borderTop: '1px solid #F0F0F0', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={handleImport} disabled={importing} style={{
             flex: 1, padding: '13px 0', borderRadius: 12, border: 'none',
-            background: importing ? '#C7D2FE' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+            background: importing ? '#A5B4FC' : '#6366F1',
             color: '#fff', fontSize: '0.95rem', fontWeight: 800, cursor: importing ? 'not-allowed' : 'pointer',
             boxShadow: importing ? 'none' : '0 4px 16px rgba(99,102,241,0.35)', transition: 'all 0.2s',
           }}>
@@ -254,160 +254,132 @@ export default function LandingPage() {
   }
 
   return (
-    <div style={{ background: '#fff' }}>
+    <div style={{ background: '#fff', color: '#1A1A1A' }}>
       {previewItinerary && <SampleModal itinerary={previewItinerary} onClose={() => setPreviewItinerary(null)} />}
       <Navbar />
 
       {/* ── HERO ── */}
-      <section style={{
-        position: 'relative',
-        background: 'linear-gradient(160deg, #E0F4FF 0%, #DBEAFE 30%, #F0F9FF 65%, #FFFFFF 100%)',
-        padding: '108px 32px 80px',
-        overflow: 'hidden',
-      }}>
-        {/* 장식 원 */}
-        <div style={{ position: 'absolute', top: -100, right: -80, width: 520, height: 520, borderRadius: '50%', background: 'rgba(14,165,233,0.07)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: -120, left: -100, width: 380, height: 380, borderRadius: '50%', background: 'rgba(255,92,0,0.05)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: '30%', right: '8%', width: 200, height: 200, borderRadius: '50%', background: 'rgba(14,165,233,0.05)', pointerEvents: 'none' }} />
-
-        <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-
-          {/* 배지 */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: '#fff', borderRadius: 24, padding: '7px 18px',
-            fontSize: '0.78rem', fontWeight: 700, color: '#0284C7',
-            border: '1.5px solid #BAE6FD', marginBottom: 26,
-            boxShadow: '0 2px 12px rgba(14,165,233,0.13)',
-          }}>
-            ✈️ &nbsp;일본 · 국내 맞춤 여행 일정 플래너
-          </div>
+      <section style={{ background: '#fff', padding: '96px 32px 72px' }}>
+        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
 
           {/* 타이틀 */}
-          <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', fontWeight: 900, color: '#0F172A', lineHeight: 1.18, letterSpacing: '-0.03em', marginBottom: 14 }}>
-            다음 여행, <span style={{ color: 'var(--primary)' }}>완벽하게</span><br />계획하세요
+          <h1 style={{ fontSize: 'clamp(2.2rem, 5vw, 3.8rem)', fontWeight: 900, color: '#1A1A1A', lineHeight: 1.15, letterSpacing: '-0.04em', marginBottom: 16 }}>
+            여행 일정,<br /><span style={{ color: 'var(--primary)' }}>쉽고 빠르게</span> 만드세요
           </h1>
-          <p style={{ fontSize: '1.05rem', color: '#64748B', marginBottom: 40, lineHeight: 1.7, maxWidth: 480 }}>
-            검증된 현지 코스로 만드는 나만의 맞춤 여행 일정
+          <p style={{ fontSize: '1.05rem', color: '#888', marginBottom: 40, lineHeight: 1.7 }}>
+            검증된 현지 코스 기반으로 동선·비용·숙박까지 한 번에
           </p>
 
           {/* ── 검색바 ── */}
           <div style={{
-            background: '#fff', borderRadius: 18, padding: 7,
-            display: 'flex', alignItems: 'stretch', width: '100%', maxWidth: 780,
-            boxShadow: '0 8px 40px rgba(14,165,233,0.15), 0 2px 8px rgba(0,0,0,0.06)',
-            border: '1.5px solid #E0F0FF', position: 'relative',
+            background: '#fff', borderRadius: 14, padding: 6,
+            display: 'flex', alignItems: 'stretch', width: '100%', maxWidth: 800, margin: '0 auto',
+            boxShadow: '0 2px 24px rgba(0,0,0,0.1)', border: '1.5px solid #E8E8E8',
           }}>
-
             {/* 여행지 */}
-            <div ref={destRef} style={{ flex: '0 0 220px', padding: '10px 18px', borderRight: '1px solid #F0F0F0', position: 'relative' }}>
-              <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', marginBottom: 3, textTransform: 'uppercase' }}>여행지</div>
+            <div ref={destRef} style={{ flex: '0 0 200px', padding: '10px 16px', borderRight: '1px solid #EBEBEB', position: 'relative' }}>
+              <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#BBB', letterSpacing: '0.1em', marginBottom: 3, textTransform: 'uppercase' }}>여행지</div>
               <input
                 value={searchDest}
                 onChange={e => { setSearchDest(e.target.value); setShowDrop(true) }}
                 onFocus={() => setShowDrop(true)}
                 placeholder="어디로 가시나요?"
-                style={{ border: 'none', outline: 'none', fontSize: '0.92rem', fontWeight: 700, color: '#1A1A1A', width: '100%', background: 'transparent' }}
+                style={{ border: 'none', outline: 'none', fontSize: '0.9rem', fontWeight: 700, color: '#1A1A1A', width: '100%', background: 'transparent' }}
               />
               {showDrop && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 10px)', left: 0, width: 260, background: '#fff', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', zIndex: 200, overflow: 'hidden', border: '1px solid #F0F0F0' }}>
-                  {filteredJP.length > 0 && (
-                    <>
-                      <div style={{ padding: '10px 16px 4px', fontSize: '0.6rem', fontWeight: 800, color: '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase' }}>🇯🇵 일본</div>
-                      {filteredJP.slice(0, 6).map(city => (
-                        <div key={city} onClick={() => { setSearchDest(city); setSearchCountry('JP'); setShowDrop(false) }}
-                          style={{ padding: '9px 16px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: '#1A1A1A', display: 'flex', gap: 8, alignItems: 'center', transition: 'background 0.1s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#FFF4EE')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        ><span>{DEST_EMOJI[city] ?? '📍'}</span>{city}</div>
-                      ))}
-                    </>
-                  )}
-                  {filteredKR.length > 0 && (
-                    <>
-                      <div style={{ padding: '8px 16px 4px', borderTop: filteredJP.length > 0 ? '1px solid #F5F5F5' : 'none', fontSize: '0.6rem', fontWeight: 800, color: '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase' }}>🇰🇷 국내</div>
-                      {filteredKR.slice(0, 4).map(city => (
-                        <div key={city} onClick={() => { setSearchDest(city); setSearchCountry('KR'); setShowDrop(false) }}
-                          style={{ padding: '9px 16px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: '#1A1A1A', display: 'flex', gap: 8, alignItems: 'center', transition: 'background 0.1s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#FFF4EE')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        ><span>{DEST_EMOJI[city] ?? '📍'}</span>{city}</div>
-                      ))}
-                    </>
-                  )}
+                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 250, background: '#fff', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 200, overflow: 'hidden', border: '1px solid #EBEBEB' }}>
+                  {filteredJP.length > 0 && (<>
+                    <div style={{ padding: '10px 16px 4px', fontSize: '0.6rem', fontWeight: 800, color: '#BBB', letterSpacing: '0.1em', textTransform: 'uppercase' }}>🇯🇵 일본</div>
+                    {filteredJP.slice(0, 6).map(city => (
+                      <div key={city} onClick={() => { setSearchDest(city); setSearchCountry('JP'); setShowDrop(false) }}
+                        style={{ padding: '9px 16px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: '#1A1A1A', display: 'flex', gap: 8, alignItems: 'center' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#FFF4EE')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      ><span>{DEST_EMOJI[city] ?? '📍'}</span>{city}</div>
+                    ))}
+                  </>)}
+                  {filteredKR.length > 0 && (<>
+                    <div style={{ padding: '8px 16px 4px', borderTop: filteredJP.length > 0 ? '1px solid #F5F5F5' : 'none', fontSize: '0.6rem', fontWeight: 800, color: '#BBB', letterSpacing: '0.1em', textTransform: 'uppercase' }}>🇰🇷 국내</div>
+                    {filteredKR.slice(0, 4).map(city => (
+                      <div key={city} onClick={() => { setSearchDest(city); setSearchCountry('KR'); setShowDrop(false) }}
+                        style={{ padding: '9px 16px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: '#1A1A1A', display: 'flex', gap: 8, alignItems: 'center' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#FFF4EE')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      ><span>{DEST_EMOJI[city] ?? '📍'}</span>{city}</div>
+                    ))}
+                  </>)}
                   {filteredJP.length === 0 && filteredKR.length === 0 && (
-                    <div style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#AAA' }}>일치하는 여행지가 없어요</div>
+                    <div style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#BBB' }}>일치하는 여행지가 없어요</div>
                   )}
                 </div>
               )}
             </div>
 
             {/* 기간 */}
-            <div style={{ flex: 1, padding: '10px 18px', borderRight: '1px solid #F0F0F0' }}>
-              <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', marginBottom: 3, textTransform: 'uppercase' }}>여행 기간</div>
+            <div style={{ flex: 1, padding: '10px 16px', borderRight: '1px solid #EBEBEB' }}>
+              <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#BBB', letterSpacing: '0.1em', marginBottom: 3, textTransform: 'uppercase' }}>여행 기간</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input type="date" value={searchStart} min={today}
                   onChange={e => setSearchStart(e.target.value)}
-                  style={{ border: 'none', outline: 'none', fontSize: '0.82rem', fontWeight: 600, color: searchStart ? '#1A1A1A' : '#AAA', background: 'transparent', flex: 1, minWidth: 0 }}
+                  style={{ border: 'none', outline: 'none', fontSize: '0.82rem', fontWeight: 600, color: searchStart ? '#1A1A1A' : '#BBB', background: 'transparent', flex: 1, minWidth: 0 }}
                 />
-                <span style={{ color: '#CBD5E1', fontSize: '0.8rem', flexShrink: 0 }}>~</span>
+                <span style={{ color: '#DDD', flexShrink: 0 }}>–</span>
                 <input type="date" value={searchEnd} min={searchStart || today}
                   onChange={e => setSearchEnd(e.target.value)}
-                  style={{ border: 'none', outline: 'none', fontSize: '0.82rem', fontWeight: 600, color: searchEnd ? '#1A1A1A' : '#AAA', background: 'transparent', flex: 1, minWidth: 0 }}
+                  style={{ border: 'none', outline: 'none', fontSize: '0.82rem', fontWeight: 600, color: searchEnd ? '#1A1A1A' : '#BBB', background: 'transparent', flex: 1, minWidth: 0 }}
                 />
               </div>
               {searchNights > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--primary)', fontWeight: 700, marginTop: 2 }}>{searchNights}박 {searchNights + 1}일</div>}
             </div>
 
             {/* 인원 */}
-            <div style={{ padding: '10px 16px', borderRight: '1px solid #F0F0F0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.08em', marginBottom: 3, textTransform: 'uppercase' }}>인원</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ padding: '10px 14px', borderRight: '1px solid #EBEBEB', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#BBB', letterSpacing: '0.1em', marginBottom: 3, textTransform: 'uppercase' }}>인원</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button onClick={() => setSearchTravelers(t => Math.max(1, t - 1))}
-                  style={{ width: 24, height: 24, borderRadius: '50%', border: '1.5px solid #E2E8F0', background: '#F8FAFC', fontSize: '1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, fontWeight: 700, color: '#555' }}>−</button>
-                <span style={{ fontSize: '0.95rem', fontWeight: 800, minWidth: 18, textAlign: 'center', color: '#1A1A1A' }}>{searchTravelers}</span>
+                  style={{ width: 24, height: 24, borderRadius: '50%', border: '1.5px solid #E0E0E0', background: '#fff', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 700, color: '#555' }}>−</button>
+                <span style={{ fontSize: '0.95rem', fontWeight: 800, minWidth: 16, textAlign: 'center' }}>{searchTravelers}</span>
                 <button onClick={() => setSearchTravelers(t => Math.min(10, t + 1))}
-                  style={{ width: 24, height: 24, borderRadius: '50%', border: '1.5px solid #E2E8F0', background: '#F8FAFC', fontSize: '1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, fontWeight: 700, color: '#555' }}>+</button>
+                  style={{ width: 24, height: 24, borderRadius: '50%', border: '1.5px solid #E0E0E0', background: '#fff', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 700, color: '#555' }}>+</button>
               </div>
             </div>
 
             {/* 검색 버튼 */}
             <button onClick={handleSearch} style={{
-              margin: 6, padding: '0 28px', borderRadius: 12,
+              margin: 5, padding: '0 28px', borderRadius: 10,
               background: 'var(--primary)', color: '#fff',
-              fontSize: '0.95rem', fontWeight: 800, border: 'none', cursor: 'pointer',
-              whiteSpace: 'nowrap', flexShrink: 0,
-              boxShadow: '0 4px 16px rgba(255,92,0,0.4)', transition: 'all 0.2s',
+              fontSize: '0.92rem', fontWeight: 800, border: 'none', cursor: 'pointer',
+              whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary-dk)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary)'; (e.currentTarget as HTMLButtonElement).style.transform = '' }}
-            >
-              일정 만들기
-            </button>
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary-dk)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary)' }}
+            >일정 만들기</button>
           </div>
 
           {/* 퀵 여행지 */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 20 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 18 }}>
             {(['도쿄', '오사카', '교토', '삿포로', '후쿠오카', '제주', '부산'] as const).map(city => (
               <button key={city} onClick={() => handleQuickDest(city, CITIES_JP.includes(city) ? 'JP' : 'KR')}
-                style={{ padding: '7px 15px', borderRadius: 20, background: '#fff', color: '#334155', fontSize: '0.78rem', fontWeight: 600, border: '1.5px solid #E2E8F0', cursor: 'pointer', transition: 'all 0.15s', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}
-                onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'var(--primary)'; b.style.color = '#fff'; b.style.borderColor = 'var(--primary)' }}
-                onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.color = '#334155'; b.style.borderColor = '#E2E8F0' }}
+                style={{ padding: '6px 14px', borderRadius: 20, background: '#F5F5F5', color: '#555', fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'var(--primary)'; b.style.color = '#fff' }}
+                onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#F5F5F5'; b.style.color = '#555' }}
               >{DEST_EMOJI[city]} {city}</button>
-            ))}
-          </div>
-
-          {/* 하단 신뢰 수치 (히어로 내) */}
-          <div style={{ display: 'flex', gap: 32, marginTop: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {STATS.map(s => (
-              <div key={s.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', lineHeight: 1 }}>{s.num}</div>
-                <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: 4, fontWeight: 500 }}>{s.label}</div>
-              </div>
             ))}
           </div>
         </div>
       </section>
+
+      {/* ── 통계 바 ── */}
+      <div style={{ borderTop: '1px solid #F0F0F0', borderBottom: '1px solid #F0F0F0', background: '#FAFAFA' }}>
+        <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 32px', display: 'flex' }}>
+          {STATS.map((s, i) => (
+            <div key={s.label} style={{ flex: 1, padding: '20px 0', textAlign: 'center', borderRight: i < STATS.length - 1 ? '1px solid #EBEBEB' : 'none' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>{s.num}</div>
+              <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 4 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* ── 인기 여행지 ── */}
       <section id="popular" style={{ padding: '72px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
@@ -432,7 +404,7 @@ export default function LandingPage() {
                   onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.05)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = '' }}
                 />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 55%)' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.15)' }} />
                 {d.badge && (
                   <div style={{ position: 'absolute', top: 10, left: 10, background: 'var(--primary)', color: '#fff', borderRadius: 4, padding: '3px 8px', fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.04em' }}>{d.badge}</div>
                 )}
@@ -465,7 +437,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── 왜 선택하나요 ── */}
-      <section style={{ background: 'linear-gradient(180deg, #F0F9FF 0%, #EFF6FF 100%)', padding: '72px 32px' }}>
+      <section style={{ background: '#F7F7F7', padding: '72px 32px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.1em', marginBottom: 10, textTransform: 'uppercase' }}>왜 다갈래인가요?</div>
@@ -480,7 +452,7 @@ export default function LandingPage() {
                 onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = 'translateY(-4px)'; el.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)' }}
                 onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = ''; el.style.boxShadow = '0 2px 10px rgba(0,0,0,0.04)' }}
               >
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: f.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.35rem', marginBottom: 16 }}>{f.icon}</div>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.35rem', marginBottom: 16 }}>{f.icon}</div>
                 <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#1A1A1A', marginBottom: 8 }}>{f.title}</div>
                 <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.7 }}>{f.desc}</div>
               </div>
@@ -513,7 +485,7 @@ export default function LandingPage() {
                   onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.05)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = '' }}
                 />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 55%)' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.15)' }} />
                 <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 5, padding: '3px 9px', fontSize: '0.68rem', fontWeight: 700 }}>🗓️ {it.nights}박{it.days}일</div>
                 <div style={{ position: 'absolute', top: 12, right: 12, background: 'var(--primary)', color: '#fff', borderRadius: 5, padding: '3px 9px', fontSize: '0.68rem', fontWeight: 700 }}>
                   {it.countryCode === 'JP' ? '🇯🇵 일본' : it.countryCode === 'KR' ? '🇰🇷 국내' : '🌏 해외'}

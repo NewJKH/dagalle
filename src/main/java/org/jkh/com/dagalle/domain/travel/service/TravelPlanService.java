@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,7 +55,7 @@ public class TravelPlanService {
         if (!request.getEndDate().isAfter(request.getStartDate())) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "귀국일은 출발일보다 늦어야 합니다");
         }
-        long nights = request.getStartDate().until(request.getEndDate()).getDays();
+        long nights = ChronoUnit.DAYS.between(request.getStartDate(), request.getEndDate());
         if (nights > 30) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "여행 기간은 최대 30박까지 가능합니다");
         }
@@ -103,17 +104,26 @@ public class TravelPlanService {
     public TravelResponse update(Long userId, Long travelId, TravelUpdateRequest request) {
         TravelPlan travel = getOwnerTravel(userId, travelId);
 
+        // COMPLETED 상태에서는 상태 변경 요청이 없는 한 수정 불가
+        if (travel.getStatus() == TravelStatus.COMPLETED && request.getStatus() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "완료된 여행은 수정할 수 없습니다");
+        }
+
         // 날짜 변경 시 검증
         LocalDate newStart = request.getStartDate() != null ? request.getStartDate() : travel.getStartDate();
         LocalDate newEnd   = request.getEndDate()   != null ? request.getEndDate()   : travel.getEndDate();
         if (!newEnd.isAfter(newStart)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "귀국일은 출발일보다 늦어야 합니다");
         }
+        long nights = ChronoUnit.DAYS.between(newStart, newEnd);
+        if (nights > 30) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "여행 기간은 최대 30박까지 가능합니다");
+        }
 
         travel.update(request.getTitle(), request.getStartLocation(), request.getEndLocation(),
                 request.getStartDate(), request.getEndDate());
 
-        // 상태 전이 검증: DRAFT→CONFIRMED→COMPLETED (역방향 불가)
+        // 상태 전이 검증: DRAFT→CONFIRMED→COMPLETED (역방향 불가, COMPLETED→불가)
         if (request.getStatus() != null) {
             validateStatusTransition(travel.getStatus(), request.getStatus());
             travel.updateStatus(request.getStatus());

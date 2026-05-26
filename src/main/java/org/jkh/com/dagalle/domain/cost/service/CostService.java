@@ -55,15 +55,17 @@ public class CostService {
                 .mapToInt(r -> r.getEstimatedCost() != null ? r.getEstimatedCost() : 0)
                 .sum();
 
-        // 렌트카 비용
+        // 렌트카 비용 (기본 렌탈료만 — 연료/통행료는 fuel/toll로 분리)
         List<CarRental> carRentals = carRentalRepository.findByTravelPlan(travel);
-        int rentalTotal = carRentals.stream()
-                .mapToInt(CarRental::totalCostKrw)
+        int rentalBase = carRentals.stream()
+                .mapToInt(r -> (r.getDailyRateKrw() != null && r.getRentalDays() != null)
+                        ? r.getDailyRateKrw() * r.getRentalDays() : 0)
                 .sum();
 
-        // 렌트카 연료비
+        // 렌트카 연료비 + 통행료 (breakdown의 연료 항목에 합산)
         int rentalFuel = carRentals.stream()
-                .mapToInt(r -> r.getEstimatedFuelKrw() != null ? r.getEstimatedFuelKrw() : 0)
+                .mapToInt(r -> (r.getEstimatedFuelKrw() != null ? r.getEstimatedFuelKrw() : 0)
+                             + (r.getEstimatedTollKrw() != null ? r.getEstimatedTollKrw() : 0))
                 .sum();
 
         // 숙박비
@@ -77,7 +79,7 @@ public class CostService {
         int flightTotal = flightPerPerson * members;
 
         // 현재 여행 경비 합계 (항공 제외)
-        int totalKrw = publicTransport + carCost + rentalTotal + accommodationTotal;
+        int totalKrw = publicTransport + carCost + rentalBase + rentalFuel + accommodationTotal;
 
         // 팀 전체 총비용 (항공 포함)
         int teamTotalKrw = totalKrw + flightTotal;
@@ -93,9 +95,9 @@ public class CostService {
                 .memberCount(members)
                 .breakdown(CostSummaryResponse.Breakdown.builder()
                         .transport(publicTransport)
-                        .fuel(carCost + rentalFuel)
+                        .fuel(carCost + rentalFuel)   // route CAR 비용 + 렌트카 연료·통행료
                         .accommodation(accommodationTotal)
-                        .rental(rentalTotal)
+                        .rental(rentalBase)            // 렌트카 기본 렌탈료만 (연료·통행료 제외)
                         .flight(flightTotal)
                         .food(0)
                         .etc(0)

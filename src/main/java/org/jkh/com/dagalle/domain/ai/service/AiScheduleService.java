@@ -1231,7 +1231,7 @@ public class AiScheduleService {
     }
 
     private long daysBetween(LocalDate start, LocalDate end) {
-        return start.until(end).getDays() + 1;
+        return java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
     }
 
     private void validateDateRange(LocalDate start, LocalDate end) {
@@ -1241,7 +1241,7 @@ public class AiScheduleService {
         if (!end.isAfter(start)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "귀국일은 출발일보다 늦어야 합니다");
         }
-        long nights = start.until(end).getDays();
+        long nights = java.time.temporal.ChronoUnit.DAYS.between(start, end);
         if (nights > 30) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "여행 기간은 최대 30박까지 가능합니다");
         }

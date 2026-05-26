@@ -28,6 +28,7 @@ public class TravelCreateRequest {
     @NotNull(message = "귀국일을 입력해주세요")
     private LocalDate endDate;
 
+    @NotBlank(message = "국가 코드를 입력해주세요")
     @Size(min = 2, max = 2, message = "국가 코드는 2자리여야 합니다")
     private String countryCode = "JP";
 

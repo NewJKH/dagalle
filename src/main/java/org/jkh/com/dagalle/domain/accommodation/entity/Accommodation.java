@@ -5,6 +5,7 @@ import lombok.*;
 import org.jkh.com.dagalle.domain.travel.entity.TravelPlan;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(name = "accommodations")
@@ -31,7 +32,7 @@ public class Accommodation {
 
     public int nights() {
         if (checkIn == null || checkOut == null) return 0;
-        return (int) checkIn.until(checkOut).getDays();
+        return (int) ChronoUnit.DAYS.between(checkIn, checkOut);
     }
 
     public int totalCostKrw() {

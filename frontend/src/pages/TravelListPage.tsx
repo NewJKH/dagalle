@@ -36,9 +36,16 @@ export default function TravelListPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      await authFetch(`/api/v1/travels/${id}`, { method: 'DELETE' })
-      setPlans(p => p.filter(t => t.id !== id))
-    } catch { /* ignore */ }
+      const res = await authFetch(`/api/v1/travels/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setPlans(p => p.filter(t => t.id !== id))
+      } else {
+        const data = await res.json().catch(() => null)
+        alert(data?.message ?? '삭제에 실패했습니다.')
+      }
+    } catch {
+      alert('서버에 연결할 수 없습니다.')
+    }
     setConfirmDelete(null)
   }
 

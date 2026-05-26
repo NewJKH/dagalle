@@ -11,11 +11,17 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false          # 운영 환경 로그 최소화
+    open-in-view: false      # OSIV 비활성화 — 뷰 렌더링 중 쿼리 방지
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.MySQLDialect
+        # 배치 INSERT/UPDATE 최적화
+        jdbc.batch_size: 50
+        order_inserts: true
+        order_updates: true
+        default_batch_fetch_size: 100
 
   data:
     redis:

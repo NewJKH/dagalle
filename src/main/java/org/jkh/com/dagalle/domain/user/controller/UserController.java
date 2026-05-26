@@ -2,6 +2,7 @@ package org.jkh.com.dagalle.domain.user.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.response.ApiResponse;
 import org.jkh.com.dagalle.common.security.UserPrincipal;
@@ -28,7 +29,7 @@ public class UserController {
     @Operation(summary = "내 정보 수정", description = "username, tendency 수정 가능")
     @PatchMapping("/me")
     public ApiResponse<UserResponse> update(@AuthenticationPrincipal UserPrincipal principal,
-                                            @RequestBody UserUpdateRequest request) {
+                                            @Valid @RequestBody UserUpdateRequest request) {
         return ApiResponse.ok(userService.update(principal.getId(), request));
     }
 

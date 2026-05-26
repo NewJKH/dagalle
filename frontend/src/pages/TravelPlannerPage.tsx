@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import MapView from '../components/MapView'
 import type { MapRoute } from '../components/MapView'
+import { useAuthFetch } from '../hooks/useAuthFetch'
 
 // ── 타입 정의 ─────────────────────────────────────────
 interface LocationInfo { id: number; name: string; lat: number; lng: number; description?: string | null; address?: string | null; type?: string | null; placeId?: string | null }
@@ -71,31 +72,23 @@ export default function TravelPlannerPage() {
 
   const autoGenTriggered = useRef(false)  // StrictMode 이중 호출 방지
 
-  const token = () => localStorage.getItem('accessToken') || ''
-  const h = () => ({ Authorization: `Bearer ${token()}` })
+  const authFetch = useAuthFetch()
 
   // ── 초기 데이터 로딩 ──────────────────────────────
   useEffect(() => {
-    if (!token()) { navigate('/login'); return }
+    if (!localStorage.getItem('accessToken')) { navigate('/login'); return }
 
-    // 401 감지 헬퍼 — 만료된 토큰 → 로그인 페이지 이동
-    const safeJson = (res: Response) => {
-      if (res.status === 401) { navigate('/login'); return Promise.resolve(null) }
-      return res.json().catch(() => null)
-    }
+    // authFetch 가 401 자동 갱신 + navigate('/login') 처리
+    const safeJson  = (res: Response) => res.json().catch(() => null)
     // 렌트카는 없을 수도 있으므로 404 시 null 반환
-    const rentalJson = (res: Response) => {
-      if (res.status === 401) { navigate('/login'); return Promise.resolve(null) }
-      if (!res.ok) return Promise.resolve(null)
-      return res.json().catch(() => null)
-    }
+    const rentalJson = (res: Response) => res.ok ? res.json().catch(() => null) : Promise.resolve(null)
 
     Promise.all([
-      fetch(`/api/v1/travels/${id}`,               { headers: h() }).then(safeJson),
-      fetch(`/api/v1/travels/${id}/days`,           { headers: h() }).then(safeJson),
-      fetch(`/api/v1/travels/${id}/rental`,         { headers: h() }).then(rentalJson),
-      fetch(`/api/v1/travels/${id}/accommodations`, { headers: h() }).then(safeJson),
-      fetch(`/api/v1/travels/${id}/cost/summary`,   { headers: h() }).then(safeJson),
+      authFetch(`/api/v1/travels/${id}`).then(safeJson),
+      authFetch(`/api/v1/travels/${id}/days`).then(safeJson),
+      authFetch(`/api/v1/travels/${id}/rental`).then(rentalJson),
+      authFetch(`/api/v1/travels/${id}/accommodations`).then(safeJson),
+      authFetch(`/api/v1/travels/${id}/cost/summary`).then(safeJson),
     ]).then(([tRes, dRes, rRes, aRes, cRes]) => {
       if (tRes?.data) setTravel(tRes.data)
       const loadedDays: Day[] = dRes?.data ?? []
@@ -121,7 +114,7 @@ export default function TravelPlannerPage() {
       if (loadedDays.length === 0 && tRes?.data && !autoGenTriggered.current) {
         autoGenTriggered.current = true
         setDayStatus(s => ({ ...s, 1: 'generating' }))
-        fetch(`/api/v1/travels/${tRes.data.id}/ai/day/1`, { method: 'POST', headers: h() })
+        authFetch(`/api/v1/travels/${tRes.data.id}/ai/day/1`, { method: 'POST' })
           .then(r => r.json())
           .then(d => {
             if (d.data) {
@@ -143,13 +136,14 @@ export default function TravelPlannerPage() {
   const updateStatus = async (newStatus: string) => {
     setStatusUpdating(true)
     try {
-      const res = await fetch(`/api/v1/travels/${id}`, {
+      const res = await authFetch(`/api/v1/travels/${id}`, {
         method: 'PATCH',
-        headers: { ...h(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       })
       const data = await res.json()
       if (res.ok && data.data) setTravel(t => t ? { ...t, status: data.data.status } : t)
+      else if (!res.ok && data.message) alert(data.message)
     } catch { /* ignore */ }
     setStatusUpdating(false)
   }
@@ -158,9 +152,9 @@ export default function TravelPlannerPage() {
   const saveTitle = async () => {
     if (!titleDraft.trim()) { setEditingTitle(false); return }
     try {
-      const res = await fetch(`/api/v1/travels/${id}`, {
+      const res = await authFetch(`/api/v1/travels/${id}`, {
         method: 'PATCH',
-        headers: { ...h(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: titleDraft.trim() }),
       })
       const data = await res.json()
@@ -173,10 +167,7 @@ export default function TravelPlannerPage() {
   const generateDay = useCallback(async (dayNum: number) => {
     setDayStatus(s => ({ ...s, [dayNum]: 'generating' }))
     try {
-      const res = await fetch(`/api/v1/travels/${id}/ai/day/${dayNum}`, {
-        method: 'POST', headers: h(),
-      })
-      if (res.status === 401) { navigate('/login'); return }
+      const res = await authFetch(`/api/v1/travels/${id}/ai/day/${dayNum}`, { method: 'POST' })
       const data = await res.json()
       if (res.ok && data.data) {
         setDays(prev => {
@@ -186,7 +177,7 @@ export default function TravelPlannerPage() {
         setDayStatus(s => ({ ...s, [dayNum]: 'done' }))
         setSelectedDay(dayNum)
         // 비용 요약 갱신
-        fetch(`/api/v1/travels/${id}/cost/summary`, { headers: h() })
+        authFetch(`/api/v1/travels/${id}/cost/summary`)
           .then(r => r.json()).then(d => { if (d.data) setCostSummary(d.data) })
       } else {
         setDayStatus(s => ({ ...s, [dayNum]: 'error' }))
@@ -195,7 +186,7 @@ export default function TravelPlannerPage() {
       setDayStatus(s => ({ ...s, [dayNum]: 'error' }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, authFetch])
 
   const currentDay   = days.find(d => d.dayNumber === selectedDay)
   const totalDays    = travel?.totalDays ?? days.length
@@ -616,7 +607,6 @@ export default function TravelPlannerPage() {
                 <DayModifyBox
                   travelId={id!}
                   dayNum={selectedDay}
-                  token={token()}
                   onModified={(newDay) => {
                     setDays(prev => [...prev.filter(d => d.dayNumber !== newDay.dayNumber), newDay].sort((a, b) => a.dayNumber - b.dayNumber))
                     setDayStatus(s => ({ ...s, [newDay.dayNumber]: 'done' }))
@@ -946,25 +936,25 @@ const EXAMPLE_PROMPTS = [
   '야경 명소 추가해줘',
 ]
 
-function DayModifyBox({ travelId, dayNum, token, onModified }: {
+function DayModifyBox({ travelId, dayNum, onModified }: {
   travelId: string
   dayNum: number
-  token: string
   onModified: (day: Day) => void
 }) {
   const [prompt, setPrompt] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const [errMsg, setErrMsg] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const authFetch = useAuthFetch()
 
   const submit = async () => {
     if (!prompt.trim() || status === 'loading') return
     setStatus('loading')
     setErrMsg('')
     try {
-      const res = await fetch(`/api/v1/travels/${travelId}/ai/day/${dayNum}/modify`, {
+      const res = await authFetch(`/api/v1/travels/${travelId}/ai/day/${dayNum}/modify`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim() }),
       })
       const data = await res.json()

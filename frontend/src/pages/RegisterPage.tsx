@@ -16,6 +16,11 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // 프론트 검증
+    if (form.username.trim().length < 2) { setError('닉네임은 2자 이상이어야 합니다.'); return }
+    if (form.username.trim().length > 20) { setError('닉네임은 20자 이하여야 합니다.'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setError('유효한 이메일 형식이 아닙니다.'); return }
+    if (form.password.length < 8) { setError('비밀번호는 8자 이상이어야 합니다.'); return }
     if (form.password !== form.confirm) { setError('비밀번호가 일치하지 않아요.'); return }
     if (!tendency) { setError('여행 스타일을 선택해주세요.'); return }
     setLoading(true); setError('')

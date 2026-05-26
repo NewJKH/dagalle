@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import { useAuthFetch } from '../hooks/useAuthFetch'
 
 interface UserInfo {
   id: number
@@ -24,16 +25,12 @@ export default function ProfilePage() {
   const [editTendency, setEditTendency] = useState<string | null>(null)
   const [saved, setSaved]   = useState(false)
 
-  const token = () => localStorage.getItem('accessToken') || ''
-  const h = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' })
+  const authFetch = useAuthFetch()
 
   useEffect(() => {
-    if (!token()) { navigate('/login'); return }
-    fetch('/api/v1/users/me', { headers: { Authorization: `Bearer ${token()}` } })
-      .then(r => {
-        if (r.status === 401) { navigate('/login'); return null }
-        return r.json()
-      })
+    if (!localStorage.getItem('accessToken')) { navigate('/login'); return }
+    authFetch('/api/v1/users/me')
+      .then(r => r.json())
       .then(d => {
         if (d?.data) {
           setUser(d.data)
@@ -48,9 +45,9 @@ export default function ProfilePage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const res = await fetch('/api/v1/users/me', {
+      const res = await authFetch('/api/v1/users/me', {
         method: 'PATCH',
-        headers: h(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: editUsername, tendency: editTendency }),
       })
       const data = await res.json()

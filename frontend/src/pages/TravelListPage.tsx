@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { DEST_EMOJI, DEST_IMG } from '../constants/locations'
+import { useAuthFetch } from '../hooks/useAuthFetch'
 
 interface TravelPlan {
   id: number; title: string; startLocation: string; endLocation: string
@@ -31,25 +32,25 @@ export default function TravelListPage() {
   const [filter, setFilter]     = useState<'all' | 'upcoming' | 'completed'>('all')
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
   const navigate = useNavigate()
+  const authFetch = useAuthFetch()
 
   const handleDelete = async (id: number) => {
-    const token = localStorage.getItem('accessToken')
     try {
-      await fetch(`/api/v1/travels/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      await authFetch(`/api/v1/travels/${id}`, { method: 'DELETE' })
       setPlans(p => p.filter(t => t.id !== id))
     } catch { /* ignore */ }
     setConfirmDelete(null)
   }
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken')
-    if (!token) { navigate('/login'); return }
-    fetch('/api/v1/travels', { headers: { Authorization: `Bearer ${token}` } })
+    if (!localStorage.getItem('accessToken')) { navigate('/login'); return }
+    authFetch('/api/v1/travels')
       .then(r => r.json())
       .then(d => setPlans(Array.isArray(d.data) ? d.data : (d.data?.content ?? [])))
       .catch(() => setPlans([]))
       .finally(() => setLoading(false))
-  }, [navigate])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const filtered = plans.filter(p =>
     filter === 'all' ? true :
@@ -267,6 +268,7 @@ function calcNights(start: string, end: string): number {
 
 /* ── 여행 생성 마법사 모달 ── */
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: TravelPlan) => void }) {
+  const authFetch = useAuthFetch()
   const today = new Date().toISOString().split('T')[0]
   const TOTAL_STEPS = 9 // 0..9 (step 9 = summary)
 
@@ -305,13 +307,18 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const autoNext = (delay = 280) => setTimeout(() => setStep(s => Math.min(s + 1, TOTAL_STEPS)), delay)
 
   const handleSubmit = async () => {
+    // 프론트 최종 검증
+    const nights_ = calcNights(wizard.startDate, wizard.endDate)
+    if (!wizard.startDate || !wizard.endDate) { setError('날짜를 선택해주세요.'); return }
+    if (nights_ <= 0) { setError('귀국일은 출발일보다 늦어야 합니다.'); return }
+    if (nights_ > 30) { setError('여행 기간은 최대 30박까지 가능합니다.'); return }
+    if (!wizard.endLocation) { setError('여행지를 선택해주세요.'); return }
     setLoading(true)
     setError('')
-    const token = localStorage.getItem('accessToken') || ''
     try {
-      const res = await fetch('/api/v1/travels/ai/init', {
+      const res = await authFetch('/api/v1/travels/ai/init', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           countryCode:         wizard.countryCode,
           startLocation:       '인천국제공항',

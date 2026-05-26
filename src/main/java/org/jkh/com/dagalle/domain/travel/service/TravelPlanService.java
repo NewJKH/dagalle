@@ -20,6 +20,7 @@ import org.jkh.com.dagalle.domain.travel.dto.TravelUpdateRequest;
 import org.jkh.com.dagalle.domain.travel.entity.MemberRole;
 import org.jkh.com.dagalle.domain.travel.entity.TravelMember;
 import org.jkh.com.dagalle.domain.travel.entity.TravelPlan;
+import org.jkh.com.dagalle.domain.travel.entity.TravelStatus;
 import org.jkh.com.dagalle.domain.travel.repository.TravelMemberRepository;
 import org.jkh.com.dagalle.domain.travel.repository.TravelPlanRepository;
 import org.jkh.com.dagalle.domain.user.entity.User;
@@ -46,6 +47,18 @@ public class TravelPlanService {
 
     @Transactional
     public TravelResponse create(Long userId, TravelCreateRequest request) {
+        // 날짜 검증: 출발일은 오늘 이후, 귀국일은 출발일 이후
+        if (request.getStartDate().isBefore(LocalDate.now())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "출발일은 오늘 이후여야 합니다");
+        }
+        if (!request.getEndDate().isAfter(request.getStartDate())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "귀국일은 출발일보다 늦어야 합니다");
+        }
+        long nights = request.getStartDate().until(request.getEndDate()).getDays();
+        if (nights > 30) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "여행 기간은 최대 30박까지 가능합니다");
+        }
+
         User owner = getUser(userId);
         TravelPlan travel = TravelPlan.builder()
                 .owner(owner)
@@ -89,12 +102,36 @@ public class TravelPlanService {
     @Transactional
     public TravelResponse update(Long userId, Long travelId, TravelUpdateRequest request) {
         TravelPlan travel = getOwnerTravel(userId, travelId);
+
+        // 날짜 변경 시 검증
+        LocalDate newStart = request.getStartDate() != null ? request.getStartDate() : travel.getStartDate();
+        LocalDate newEnd   = request.getEndDate()   != null ? request.getEndDate()   : travel.getEndDate();
+        if (!newEnd.isAfter(newStart)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "귀국일은 출발일보다 늦어야 합니다");
+        }
+
         travel.update(request.getTitle(), request.getStartLocation(), request.getEndLocation(),
                 request.getStartDate(), request.getEndDate());
+
+        // 상태 전이 검증: DRAFT→CONFIRMED→COMPLETED (역방향 불가)
         if (request.getStatus() != null) {
+            validateStatusTransition(travel.getStatus(), request.getStatus());
             travel.updateStatus(request.getStatus());
         }
         return TravelResponse.from(travel);
+    }
+
+    /** 허용 전이: DRAFT→CONFIRMED, CONFIRMED→COMPLETED */
+    private void validateStatusTransition(TravelStatus current, TravelStatus next) {
+        boolean valid = switch (current) {
+            case DRAFT     -> next == TravelStatus.CONFIRMED;
+            case CONFIRMED -> next == TravelStatus.COMPLETED || next == TravelStatus.DRAFT; // 취소 허용
+            case COMPLETED -> false; // 완료 후 변경 불가
+        };
+        if (!valid) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    current.name() + " 상태에서 " + next.name() + "으로 변경할 수 없습니다");
+        }
     }
 
     @Transactional

@@ -64,7 +64,7 @@ public class TravelPlanController {
     public ApiResponse<TravelResponse> update(
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "여행 ID") @PathVariable Long travelId,
-            @RequestBody TravelUpdateRequest request) {
+            @Valid @RequestBody TravelUpdateRequest request) {
         return ApiResponse.ok(travelPlanService.update(principal.getId(), travelId, request));
     }
 

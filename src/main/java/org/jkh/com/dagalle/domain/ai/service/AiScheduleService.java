@@ -45,7 +45,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -101,6 +100,7 @@ public class AiScheduleService {
 
     @Transactional
     public TravelResponse generateSchedule(Long userId, AiGenerateRequest req) {
+        validateDateRange(req.getStartDate(), req.getEndDate());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
@@ -150,6 +150,7 @@ public class AiScheduleService {
 
     @Transactional
     public TravelResponse initSchedule(Long userId, AiGenerateRequest req) {
+        validateDateRange(req.getStartDate(), req.getEndDate());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         int totalDays = (int) daysBetween(req.getStartDate(), req.getEndDate());
@@ -1231,6 +1232,19 @@ public class AiScheduleService {
 
     private long daysBetween(LocalDate start, LocalDate end) {
         return start.until(end).getDays() + 1;
+    }
+
+    private void validateDateRange(LocalDate start, LocalDate end) {
+        if (start == null || end == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "출발일과 귀국일을 입력해주세요");
+        }
+        if (!end.isAfter(start)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "귀국일은 출발일보다 늦어야 합니다");
+        }
+        long nights = start.until(end).getDays();
+        if (nights > 30) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "여행 기간은 최대 30박까지 가능합니다");
+        }
     }
 
     private Integer nodeIntOrNull(JsonNode node, String field) {

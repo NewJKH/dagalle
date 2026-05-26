@@ -41,7 +41,10 @@ public enum ErrorCode {
     RENTAL_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "렌트카 정보를 찾을 수 없습니다"),
 
     // Accommodation
-    ACCOMMODATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "숙박 정보를 찾을 수 없습니다");
+    ACCOMMODATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "숙박 정보를 찾을 수 없습니다"),
+
+    // Rate Limiting
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS", "요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus status;
     private final String code;

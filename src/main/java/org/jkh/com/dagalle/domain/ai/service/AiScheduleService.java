@@ -183,15 +183,31 @@ public class AiScheduleService {
         String flightHint = buildFlightHint(travel, dayNumber, totalDays);
         boolean nightviewUsed = isNightviewAlreadyUsed(travel, dayNumber);
 
-        String dayRaw = claudeApiClient.chat(
-                buildDaySystemPrompt(travel.getCountryCode(),
-                        travel.getFoodScore(), travel.getAccommodationScore(),
-                        travel.getExtremeScore(), travel.getTransportScore()),
-                buildDayUserMessage(travel, dayNumber, totalDays, date,
-                        prevLastLocation, accommodationHint.trim(), flightHint, nightviewUsed));
+        // ── TODO: 하드코딩 fallback 활성 (나중에 제거) ──────────────────
+        String dayRaw;
+        try {
+            dayRaw = claudeApiClient.chat(
+                    buildDaySystemPrompt(travel.getCountryCode(),
+                            travel.getFoodScore(), travel.getAccommodationScore(),
+                            travel.getExtremeScore(), travel.getTransportScore()),
+                    buildDayUserMessage(travel, dayNumber, totalDays, date,
+                            prevLastLocation, accommodationHint.trim(), flightHint, nightviewUsed));
+        } catch (Exception e) {
+            log.warn("[AI generateDay] Claude 호출 실패 → 하드코딩 fallback. day={}, dest={}, err={}",
+                    dayNumber, travel.getEndLocation(), e.getMessage());
+            dayRaw = buildFallbackDayJson(travel.getEndLocation(), travel.getCountryCode(), dayNumber, date);
+        }
         log.debug("[AI day{} 응답] {}", dayNumber, dayRaw);
 
-        JsonNode dayNode = parseJson(dayRaw);
+        JsonNode dayNode;
+        try {
+            dayNode = parseJson(dayRaw);
+        } catch (Exception e) {
+            log.warn("[AI generateDay] JSON 파싱 실패 → 하드코딩 fallback. day={}, err={}", dayNumber, e.getMessage());
+            dayNode = parseJson(buildFallbackDayJson(travel.getEndLocation(), travel.getCountryCode(), dayNumber, date));
+        }
+        // ── 하드코딩 fallback 끝 ───────────────────────────────────────
+
         savePlanDay(travel, dayNode, dayNumber, date);
 
         entityManager.flush();
@@ -1158,16 +1174,28 @@ public class AiScheduleService {
 
     private JsonNode parseJson(String raw) {
         String cleaned = raw.strip();
+
+        // 1) 마크다운 코드블록 제거
         if (cleaned.startsWith("```")) {
             int first = cleaned.indexOf('\n');
             int last  = cleaned.lastIndexOf("```");
             if (first > 0 && last > first)
                 cleaned = cleaned.substring(first + 1, last).strip();
         }
+
+        // 2) 직접 파싱 시도
         try { return objectMapper.readTree(cleaned); }
-        catch (JacksonException e) {
-            log.error("[JSON 파싱 실패] raw={}", raw, e);
-            throw new IllegalStateException("Claude 응답 파싱 실패: " + e.getMessage(), e);
+        catch (JacksonException e1) {
+            // 3) 앞뒤 텍스트 무시하고 첫 { ... } 블록만 추출
+            int start = cleaned.indexOf('{');
+            int end   = cleaned.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                try {
+                    return objectMapper.readTree(cleaned.substring(start, end + 1));
+                } catch (JacksonException e2) { /* fall through */ }
+            }
+            log.error("[JSON 파싱 실패] raw={}", raw, e1);
+            throw new IllegalStateException("Claude 응답 파싱 실패: " + e1.getMessage(), e1);
         }
     }
 
@@ -1273,6 +1301,168 @@ public class AiScheduleService {
     private long daysBetween(LocalDate start, LocalDate end) {
         return java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
     }
+
+    // ── TODO: 하드코딩 fallback 일정 (나중에 제거) ──────────────────────
+    /**
+     * Claude/파싱 실패 시 사용하는 하드코딩 fallback 일정.
+     * 여행지별로 실제 존재하는 장소 + 실제 좌표를 사용.
+     * 나중에 제거 예정 (사용자 요청 시).
+     */
+    private String buildFallbackDayJson(String destination, String countryCode, int dayNumber, LocalDate date) {
+        log.warn("[Fallback] 하드코딩 일정 반환: dest={}, day={}", destination, dayNumber);
+        String d = date.toString();
+        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+
+        // 도쿄
+        if (destination != null && (destination.contains("도쿄") || destination.contains("Tokyo"))) {
+            return switch (((dayNumber - 1) % 3)) {
+                case 0 -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"신주쿠역 (新宿駅)","address":"Shinjuku, Tokyo, Japan","lat":35.6896,"lng":139.7006,"type":"STATION","description":"도쿄 최대 환승역"},"toLocation":{"name":"신주쿠 교엔 (新宿御苑)","address":"11 Naitomachi, Shinjuku City, Tokyo","lat":35.6852,"lng":139.7100,"type":"PARK","description":"도쿄 도심 대형 정원"},"transport":"WALK","departureTime":"09:00","durationMinutes":15,"estimatedCost":500,"note":"신주쿠역 남쪽 출구에서 도보 15분"},
+                      {"fromLocation":{"name":"신주쿠 교엔 (新宿御苑)","address":"11 Naitomachi, Shinjuku City, Tokyo","lat":35.6852,"lng":139.7100,"type":"PARK","description":"도쿄 도심 대형 정원"},"toLocation":{"name":"이치란 라멘 신주쿠점 (一蘭 新宿店)","address":"3-34-11 Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.7024,"type":"RESTAURANT","description":"유명 1인 돈코츠 라멘 전문점"},"transport":"WALK","departureTime":"11:30","durationMinutes":20,"estimatedCost":1800,"note":"도보 이동 후 점심"},
+                      {"fromLocation":{"name":"이치란 라멘 신주쿠점 (一蘭 新宿店)","address":"3-34-11 Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.7024,"type":"RESTAURANT","description":"유명 1인 돈코츠 라멘 전문점"},"toLocation":{"name":"시부야 스크램블 교차로 (渋谷スクランブル交差点)","address":"2 Dogenzaka, Shibuya City, Tokyo","lat":35.6598,"lng":139.7004,"type":"ETC","description":"세계 최대 교차로"},"transport":"SUBWAY","departureTime":"13:00","durationMinutes":20,"estimatedCost":210,"note":"JR 야마노테선 시부야 방향"},
+                      {"fromLocation":{"name":"시부야 스크램블 교차로 (渋谷スクランブル交差点)","address":"2 Dogenzaka, Shibuya City, Tokyo","lat":35.6598,"lng":139.7004,"type":"ETC","description":"세계 최대 교차로"},"toLocation":{"name":"시부야 히카리에 (渋谷ヒカリエ)","address":"2-21-1 Shibuya, Shibuya City, Tokyo","lat":35.6590,"lng":139.7028,"type":"SHOPPING","description":"시부야역 직결 복합 쇼핑몰"},"transport":"WALK","departureTime":"13:30","durationMinutes":10,"estimatedCost":0,"note":"스크램블 교차로 바로 옆"},
+                      {"fromLocation":{"name":"시부야 히카리에 (渋谷ヒカリエ)","address":"2-21-1 Shibuya, Shibuya City, Tokyo","lat":35.6590,"lng":139.7028,"type":"SHOPPING","description":"시부야역 직결 복합 쇼핑몰"},"toLocation":{"name":"하라주쿠 타케시타 거리 (竹下通り)","address":"1-17-5 Jingumae, Shibuya City, Tokyo","lat":35.6701,"lng":139.7037,"type":"SHOPPING","description":"패션·먹거리 명소"},"transport":"SUBWAY","departureTime":"15:30","durationMinutes":10,"estimatedCost":180,"note":"JR 하라주쿠역 하차"},
+                      {"fromLocation":{"name":"하라주쿠 타케시타 거리 (竹下通り)","address":"1-17-5 Jingumae, Shibuya City, Tokyo","lat":35.6701,"lng":139.7037,"type":"SHOPPING","description":"패션·먹거리 명소"},"toLocation":{"name":"신주쿠 워싱턴 호텔 (Shinjuku Washington Hotel)","address":"3-2-9 Nishi-Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.6948,"type":"HOTEL","description":"신주쿠 비즈니스 호텔"},"transport":"SUBWAY","departureTime":"19:00","durationMinutes":20,"estimatedCost":200,"note":"JR 야마노테선 신주쿠 방향"}
+                    ]}""".formatted(dayNumber, d);
+                case 1 -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"신주쿠 워싱턴 호텔 (Shinjuku Washington Hotel)","address":"3-2-9 Nishi-Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.6948,"type":"HOTEL","description":"신주쿠 비즈니스 호텔"},"toLocation":{"name":"아사쿠사 센소지 (浅草寺)","address":"2-3-1 Asakusa, Taito City, Tokyo","lat":35.7148,"lng":139.7967,"type":"MUSEUM","description":"도쿄 최고(最古) 사원"},"transport":"SUBWAY","departureTime":"09:00","durationMinutes":40,"estimatedCost":260,"note":"지하철 긴자선 아사쿠사 방향"},
+                      {"fromLocation":{"name":"아사쿠사 센소지 (浅草寺)","address":"2-3-1 Asakusa, Taito City, Tokyo","lat":35.7148,"lng":139.7967,"type":"MUSEUM","description":"도쿄 최고(最古) 사원"},"toLocation":{"name":"나카미세 상점가 (仲見世通り)","address":"1-36-3 Asakusa, Taito City, Tokyo","lat":35.7128,"lng":139.7958,"type":"SHOPPING","description":"센소지 앞 전통 상점가"},"transport":"WALK","departureTime":"11:00","durationMinutes":10,"estimatedCost":0,"note":"센소지 경내 도보"},
+                      {"fromLocation":{"name":"나카미세 상점가 (仲見世通り)","address":"1-36-3 Asakusa, Taito City, Tokyo","lat":35.7128,"lng":139.7958,"type":"SHOPPING","description":"센소지 앞 전통 상점가"},"toLocation":{"name":"카페 도니아 아사쿠사 (Cafe Donia Asakusa)","address":"1-14-10 Asakusa, Taito City, Tokyo","lat":35.7120,"lng":139.7935,"type":"CAFE","description":"아사쿠사 로컬 카페"},"transport":"WALK","departureTime":"12:00","durationMinutes":20,"estimatedCost":800,"note":"점심 전 카페 휴식"},
+                      {"fromLocation":{"name":"카페 도니아 아사쿠사 (Cafe Donia Asakusa)","address":"1-14-10 Asakusa, Taito City, Tokyo","lat":35.7120,"lng":139.7935,"type":"CAFE","description":"아사쿠사 로컬 카페"},"toLocation":{"name":"우에노 공원 (上野公園)","address":"Uenokoen, Taito City, Tokyo","lat":35.7147,"lng":139.7740,"type":"PARK","description":"도쿄 최대 공원·박물관 집적지"},"transport":"SUBWAY","departureTime":"13:30","durationMinutes":15,"estimatedCost":180,"note":"지하철 긴자선 우에노 방향"},
+                      {"fromLocation":{"name":"우에노 공원 (上野公園)","address":"Uenokoen, Taito City, Tokyo","lat":35.7147,"lng":139.7740,"type":"PARK","description":"도쿄 최대 공원·박물관 집적지"},"toLocation":{"name":"아키하바라 전자상가 (秋葉原電気街)","address":"1-1 Sotokanda, Chiyoda City, Tokyo","lat":35.7022,"lng":139.7741,"type":"SHOPPING","description":"전자제품·피규어 쇼핑 명소"},"transport":"SUBWAY","departureTime":"15:30","durationMinutes":15,"estimatedCost":180,"note":"JR 야마노테선 아키하바라 방향"},
+                      {"fromLocation":{"name":"아키하바라 전자상가 (秋葉原電気街)","address":"1-1 Sotokanda, Chiyoda City, Tokyo","lat":35.7022,"lng":139.7741,"type":"SHOPPING","description":"전자제품·피규어 쇼핑 명소"},"toLocation":{"name":"신주쿠 워싱턴 호텔 (Shinjuku Washington Hotel)","address":"3-2-9 Nishi-Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.6948,"type":"HOTEL","description":"신주쿠 비즈니스 호텔"},"transport":"SUBWAY","departureTime":"19:00","durationMinutes":30,"estimatedCost":260,"note":"JR 츄오선 신주쿠 방향"}
+                    ]}""".formatted(dayNumber, d);
+                default -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"신주쿠 워싱턴 호텔 (Shinjuku Washington Hotel)","address":"3-2-9 Nishi-Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.6948,"type":"HOTEL","description":"신주쿠 비즈니스 호텔"},"toLocation":{"name":"츠키지 시장 (築地市場)","address":"4-16-2 Tsukiji, Chuo City, Tokyo","lat":35.6654,"lng":139.7706,"type":"RESTAURANT","description":"도쿄 유명 해산물 시장"},"transport":"SUBWAY","departureTime":"08:00","durationMinutes":30,"estimatedCost":230,"note":"지하철 히비야선 츠키지 방향"},
+                      {"fromLocation":{"name":"츠키지 시장 (築地市場)","address":"4-16-2 Tsukiji, Chuo City, Tokyo","lat":35.6654,"lng":139.7706,"type":"RESTAURANT","description":"도쿄 유명 해산물 시장"},"toLocation":{"name":"도쿄 타워 (東京タワー)","address":"4-2-8 Shibakoen, Minato City, Tokyo","lat":35.6586,"lng":139.7454,"type":"ETC","description":"도쿄 랜드마크 전망대"},"transport":"SUBWAY","departureTime":"10:00","durationMinutes":20,"estimatedCost":180,"note":"지하철 오에도선 아카바네바시 방향"},
+                      {"fromLocation":{"name":"도쿄 타워 (東京タワー)","address":"4-2-8 Shibakoen, Minato City, Tokyo","lat":35.6586,"lng":139.7454,"type":"ETC","description":"도쿄 랜드마크 전망대"},"toLocation":{"name":"오다이바 (お台場)","address":"1-chome Daiba, Minato City, Tokyo","lat":35.6252,"lng":139.7751,"type":"SHOPPING","description":"도쿄만 인공섬 쇼핑·관광지"},"transport":"BUS","departureTime":"12:30","durationMinutes":30,"estimatedCost":400,"note":"직행 버스 이용"},
+                      {"fromLocation":{"name":"오다이바 (お台場)","address":"1-chome Daiba, Minato City, Tokyo","lat":35.6252,"lng":139.7751,"type":"SHOPPING","description":"도쿄만 인공섬 쇼핑·관광지"},"toLocation":{"name":"디버시티 도쿄 플라자 (DiverCity Tokyo Plaza)","address":"1-1-10 Aomi, Koto City, Tokyo","lat":35.6257,"lng":139.7760,"type":"SHOPPING","description":"건담 실물 크기 조형물 있는 쇼핑몰"},"transport":"WALK","departureTime":"14:00","durationMinutes":10,"estimatedCost":0,"note":"오다이바 내 도보"},
+                      {"fromLocation":{"name":"디버시티 도쿄 플라자 (DiverCity Tokyo Plaza)","address":"1-1-10 Aomi, Koto City, Tokyo","lat":35.6257,"lng":139.7760,"type":"SHOPPING","description":"건담 실물 크기 조형물 있는 쇼핑몰"},"toLocation":{"name":"신주쿠 워싱턴 호텔 (Shinjuku Washington Hotel)","address":"3-2-9 Nishi-Shinjuku, Shinjuku City, Tokyo","lat":35.6906,"lng":139.6948,"type":"HOTEL","description":"신주쿠 비즈니스 호텔"},"transport":"TRAIN","departureTime":"18:30","durationMinutes":40,"estimatedCost":380,"note":"유리카모메 → JR 신주쿠 방향"}
+                    ]}""".formatted(dayNumber, d);
+            };
+        }
+
+        // 오사카
+        if (destination != null && (destination.contains("오사카") || destination.contains("Osaka"))) {
+            return switch (((dayNumber - 1) % 3)) {
+                case 0 -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"난바역 (難波駅)","address":"Namba, Chuo Ward, Osaka","lat":34.6659,"lng":135.5010,"type":"STATION","description":"오사카 최대 번화가 역"},"toLocation":{"name":"도톤보리 (道頓堀)","address":"Dotonbori, Chuo Ward, Osaka","lat":34.6687,"lng":135.5013,"type":"ETC","description":"오사카 대표 먹자골목"},"transport":"WALK","departureTime":"09:30","durationMinutes":10,"estimatedCost":0,"note":"난바역에서 도보 5분"},
+                      {"fromLocation":{"name":"도톤보리 (道頓堀)","address":"Dotonbori, Chuo Ward, Osaka","lat":34.6687,"lng":135.5013,"type":"ETC","description":"오사카 대표 먹자골목"},"toLocation":{"name":"구로몬 시장 (黒門市場)","address":"2-4-1 Nipponbashi, Chuo Ward, Osaka","lat":34.6679,"lng":135.5063,"type":"RESTAURANT","description":"오사카의 부엌 재래시장"},"transport":"WALK","departureTime":"11:00","durationMinutes":15,"estimatedCost":2000,"note":"도보로 이동, 시장 먹거리 즐기기"},
+                      {"fromLocation":{"name":"구로몬 시장 (黒門市場)","address":"2-4-1 Nipponbashi, Chuo Ward, Osaka","lat":34.6679,"lng":135.5063,"type":"RESTAURANT","description":"오사카의 부엌 재래시장"},"toLocation":{"name":"신사이바시 쇼핑 거리 (心斎橋筋商店街)","address":"Shinsaibashisuji, Chuo Ward, Osaka","lat":34.6726,"lng":135.5005,"type":"SHOPPING","description":"오사카 최대 쇼핑 아케이드"},"transport":"SUBWAY","departureTime":"13:00","durationMinutes":10,"estimatedCost":230,"note":"지하철 사카이스지선 이용"},
+                      {"fromLocation":{"name":"신사이바시 쇼핑 거리 (心斎橋筋商店街)","address":"Shinsaibashisuji, Chuo Ward, Osaka","lat":34.6726,"lng":135.5005,"type":"SHOPPING","description":"오사카 최대 쇼핑 아케이드"},"toLocation":{"name":"오사카성 (大阪城)","address":"1-1 Osakajo, Chuo Ward, Osaka","lat":34.6873,"lng":135.5262,"type":"MUSEUM","description":"오사카 대표 역사 유적"},"transport":"SUBWAY","departureTime":"15:00","durationMinutes":20,"estimatedCost":230,"note":"지하철 나가호리 츠루미료쿠치선 이용"},
+                      {"fromLocation":{"name":"오사카성 (大阪城)","address":"1-1 Osakajo, Chuo Ward, Osaka","lat":34.6873,"lng":135.5262,"type":"MUSEUM","description":"오사카 대표 역사 유적"},"toLocation":{"name":"오사카 크로스 호텔 (Cross Hotel Osaka)","address":"2-5-15 Shinsaibashisuji, Chuo Ward, Osaka","lat":34.6706,"lng":135.5014,"type":"HOTEL","description":"신사이바시 인근 호텔"},"transport":"SUBWAY","departureTime":"19:00","durationMinutes":25,"estimatedCost":230,"note":"지하철 나가호리선 신사이바시 방향"}
+                    ]}""".formatted(dayNumber, d);
+                default -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"오사카 크로스 호텔 (Cross Hotel Osaka)","address":"2-5-15 Shinsaibashisuji, Chuo Ward, Osaka","lat":34.6706,"lng":135.5014,"type":"HOTEL","description":"신사이바시 인근 호텔"},"toLocation":{"name":"유니버설 스튜디오 재팬 (USJ)","address":"2-1-33 Sakurajima, Konohana Ward, Osaka","lat":34.6654,"lng":135.4323,"type":"ETC","description":"오사카 대형 테마파크"},"transport":"TRAIN","departureTime":"08:30","durationMinutes":30,"estimatedCost":490,"note":"JR 유메사키선 유니버설시티 방향"},
+                      {"fromLocation":{"name":"유니버설 스튜디오 재팬 (USJ)","address":"2-1-33 Sakurajima, Konohana Ward, Osaka","lat":34.6654,"lng":135.4323,"type":"ETC","description":"오사카 대형 테마파크"},"toLocation":{"name":"오사카 크로스 호텔 (Cross Hotel Osaka)","address":"2-5-15 Shinsaibashisuji, Chuo Ward, Osaka","lat":34.6706,"lng":135.5014,"type":"HOTEL","description":"신사이바시 인근 호텔"},"transport":"TRAIN","departureTime":"19:00","durationMinutes":30,"estimatedCost":490,"note":"JR 유메사키선 복귀"}
+                    ]}""".formatted(dayNumber, d);
+            };
+        }
+
+        // 교토
+        if (destination != null && (destination.contains("교토") || destination.contains("Kyoto"))) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"교토역 (京都駅)","address":"Karasuma-dori, Shimogyo Ward, Kyoto","lat":34.9858,"lng":135.7588,"type":"STATION","description":"교토 관문"},"toLocation":{"name":"후시미 이나리 신사 (伏見稲荷大社)","address":"68 Fukakusa Yabunouchicho, Fushimi Ward, Kyoto","lat":34.9671,"lng":135.7727,"type":"MUSEUM","description":"천 개의 도리이 명소"},"transport":"TRAIN","departureTime":"09:00","durationMinutes":15,"estimatedCost":150,"note":"JR 나라선 이나리역 하차"},
+                  {"fromLocation":{"name":"후시미 이나리 신사 (伏見稲荷大社)","address":"68 Fukakusa Yabunouchicho, Fushimi Ward, Kyoto","lat":34.9671,"lng":135.7727,"type":"MUSEUM","description":"천 개의 도리이 명소"},"toLocation":{"name":"기온 거리 (祇園)","address":"Gion, Higashiyama Ward, Kyoto","lat":35.0036,"lng":135.7788,"type":"ETC","description":"마이코·게이샤 문화 거리"},"transport":"TRAIN","departureTime":"11:30","durationMinutes":20,"estimatedCost":200,"note":"JR 나라선 → 버스 이용"},
+                  {"fromLocation":{"name":"기온 거리 (祇園)","address":"Gion, Higashiyama Ward, Kyoto","lat":35.0036,"lng":135.7788,"type":"ETC","description":"마이코·게이샤 문화 거리"},"toLocation":{"name":"기요미즈데라 (清水寺)","address":"1-294 Kiyomizu, Higashiyama Ward, Kyoto","lat":34.9949,"lng":135.7850,"type":"MUSEUM","description":"교토 세계문화유산 사원"},"transport":"WALK","departureTime":"13:00","durationMinutes":20,"estimatedCost":500,"note":"기온에서 도보 이동, 입장료 포함"},
+                  {"fromLocation":{"name":"기요미즈데라 (清水寺)","address":"1-294 Kiyomizu, Higashiyama Ward, Kyoto","lat":34.9949,"lng":135.7850,"type":"MUSEUM","description":"교토 세계문화유산 사원"},"toLocation":{"name":"아라시야마 (嵐山)","address":"Arashiyama, Nishikyo Ward, Kyoto","lat":35.0094,"lng":135.6761,"type":"PARK","description":"대나무 숲·강변 명소"},"transport":"BUS","departureTime":"15:00","durationMinutes":45,"estimatedCost":230,"note":"시내버스 이용"},
+                  {"fromLocation":{"name":"아라시야마 (嵐山)","address":"Arashiyama, Nishikyo Ward, Kyoto","lat":35.0094,"lng":135.6761,"type":"PARK","description":"대나무 숲·강변 명소"},"toLocation":{"name":"교토 더 서울 호텔 (Hotel The Celestine Kyoto Gion)","address":"Minamigawa, Yamatooji-dori, Higashiyama Ward, Kyoto","lat":35.0015,"lng":135.7775,"type":"HOTEL","description":"기온 인근 호텔"},"transport":"TRAIN","departureTime":"18:30","durationMinutes":40,"estimatedCost":310,"note":"사가노선 → 지하철 이용"}
+                ]}""".formatted(dayNumber, d);
+        }
+
+        // 제주
+        if (destination != null && (destination.contains("제주"))) {
+            return switch (((dayNumber - 1) % 2)) {
+                case 0 -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"제주국제공항","address":"2 Gonghangnamseo-ro, Jeju-si, Jeju-do","lat":33.5113,"lng":126.4928,"type":"AIRPORT","description":"제주 관문"},"toLocation":{"name":"한림공원","address":"300 Hallim-ro, Hallim-eup, Jeju-si","lat":33.4097,"lng":126.2479,"type":"PARK","description":"아열대 식물원·동굴 명소"},"transport":"CAR","departureTime":"10:00","durationMinutes":40,"estimatedCost":5000,"note":"렌터카 서쪽 방향"},
+                      {"fromLocation":{"name":"한림공원","address":"300 Hallim-ro, Hallim-eup, Jeju-si","lat":33.4097,"lng":126.2479,"type":"PARK","description":"아열대 식물원·동굴 명소"},"toLocation":{"name":"협재해수욕장","address":"Hyeopjaehaebyeon-gil, Hallim-eup, Jeju-si","lat":33.3944,"lng":126.2394,"type":"PARK","description":"에메랄드빛 제주 해수욕장"},"transport":"CAR","departureTime":"12:00","durationMinutes":10,"estimatedCost":2000,"note":"렌터카 이동"},
+                      {"fromLocation":{"name":"협재해수욕장","address":"Hyeopjaehaebyeon-gil, Hallim-eup, Jeju-si","lat":33.3944,"lng":126.2394,"type":"PARK","description":"에메랄드빛 제주 해수욕장"},"toLocation":{"name":"오설록 티 뮤지엄","address":"15 Sinhwayeoksa-ro, Andeok-myeon, Seogwipo-si","lat":33.3057,"lng":126.2897,"type":"MUSEUM","description":"국내 최대 녹차밭·티 박물관"},"transport":"CAR","departureTime":"14:30","durationMinutes":35,"estimatedCost":5000,"note":"렌터카 남쪽 방향"},
+                      {"fromLocation":{"name":"오설록 티 뮤지엄","address":"15 Sinhwayeoksa-ro, Andeok-myeon, Seogwipo-si","lat":33.3057,"lng":126.2897,"type":"MUSEUM","description":"국내 최대 녹차밭·티 박물관"},"toLocation":{"name":"제주 신화월드 내 호텔 (Jeju Shinhwa World Hotels)","address":"2889-1 Sanrokbuk-ro, Andeok-myeon, Seogwipo-si","lat":33.3103,"lng":126.2992,"type":"HOTEL","description":"제주 서쪽 리조트 호텔"},"transport":"CAR","departureTime":"17:00","durationMinutes":10,"estimatedCost":2000,"note":"렌터카 이동, 체크인"}
+                    ]}""".formatted(dayNumber, d);
+                default -> """
+                    {"dayNumber":%d,"date":"%s","routes":[
+                      {"fromLocation":{"name":"제주 신화월드 내 호텔 (Jeju Shinhwa World Hotels)","address":"2889-1 Sanrokbuk-ro, Andeok-myeon, Seogwipo-si","lat":33.3103,"lng":126.2992,"type":"HOTEL","description":"제주 서쪽 리조트 호텔"},"toLocation":{"name":"성산일출봉 (Seongsan Ilchulbong)","address":"284-12 Seongsan-ri, Seongsan-eup, Seogwipo-si","lat":33.4584,"lng":126.9425,"type":"PARK","description":"유네스코 세계자연유산"},"transport":"CAR","departureTime":"07:00","durationMinutes":70,"estimatedCost":8000,"note":"렌터카 동쪽 방향, 일출 명소"},
+                      {"fromLocation":{"name":"성산일출봉 (Seongsan Ilchulbong)","address":"284-12 Seongsan-ri, Seongsan-eup, Seogwipo-si","lat":33.4584,"lng":126.9425,"type":"PARK","description":"유네스코 세계자연유산"},"toLocation":{"name":"제주 해녀박물관","address":"26 Haenyeo-ro, Gujwa-eup, Jeju-si","lat":33.5477,"lng":126.8627,"type":"MUSEUM","description":"제주 해녀 문화 박물관"},"transport":"CAR","departureTime":"10:00","durationMinutes":30,"estimatedCost":5000,"note":"렌터카 이동"},
+                      {"fromLocation":{"name":"제주 해녀박물관","address":"26 Haenyeo-ro, Gujwa-eup, Jeju-si","lat":33.5477,"lng":126.8627,"type":"MUSEUM","description":"제주 해녀 문화 박물관"},"toLocation":{"name":"함덕해수욕장","address":"791 Hamdeok-ri, Jocheon-eup, Jeju-si","lat":33.5431,"lng":126.6694,"type":"PARK","description":"제주 동쪽 에메랄드 해수욕장"},"transport":"CAR","departureTime":"12:30","durationMinutes":25,"estimatedCost":4000,"note":"렌터카 이동"},
+                      {"fromLocation":{"name":"함덕해수욕장","address":"791 Hamdeok-ri, Jocheon-eup, Jeju-si","lat":33.5431,"lng":126.6694,"type":"PARK","description":"제주 동쪽 에메랄드 해수욕장"},"toLocation":{"name":"제주 신화월드 내 호텔 (Jeju Shinhwa World Hotels)","address":"2889-1 Sanrokbuk-ro, Andeok-myeon, Seogwipo-si","lat":33.3103,"lng":126.2992,"type":"HOTEL","description":"제주 서쪽 리조트 호텔"},"transport":"CAR","departureTime":"17:00","durationMinutes":60,"estimatedCost":8000,"note":"렌터카 서쪽 방향"}
+                    ]}""".formatted(dayNumber, d);
+            };
+        }
+
+        // 부산
+        if (destination != null && (destination.contains("부산") || destination.contains("Busan"))) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"부산역","address":"206 Chungjang-daero, Dong-gu, Busan","lat":35.1151,"lng":129.0416,"type":"STATION","description":"부산 KTX 터미널역"},"toLocation":{"name":"자갈치 시장","address":"52 Jagalchihaean-ro, Jung-gu, Busan","lat":35.0972,"lng":129.0300,"type":"RESTAURANT","description":"부산 대표 수산물 시장"},"transport":"SUBWAY","departureTime":"09:30","durationMinutes":20,"estimatedCost":1600,"note":"지하철 1호선 남포역 하차"},
+                  {"fromLocation":{"name":"자갈치 시장","address":"52 Jagalchihaean-ro, Jung-gu, Busan","lat":35.0972,"lng":129.0300,"type":"RESTAURANT","description":"부산 대표 수산물 시장"},"toLocation":{"name":"감천문화마을","address":"203 Gamnae 2-ro, Saha-gu, Busan","lat":35.0972,"lng":129.0106,"type":"ETC","description":"부산 색깔마을 벽화골목"},"transport":"BUS","departureTime":"11:30","durationMinutes":20,"estimatedCost":1600,"note":"마을버스 이용"},
+                  {"fromLocation":{"name":"감천문화마을","address":"203 Gamnae 2-ro, Saha-gu, Busan","lat":35.0972,"lng":129.0106,"type":"ETC","description":"부산 색깔마을 벽화골목"},"toLocation":{"name":"해운대 해수욕장","address":"264 Haeundaehaebyeon-ro, Haeundae-gu, Busan","lat":35.1587,"lng":129.1604,"type":"PARK","description":"부산 대표 해수욕장"},"transport":"SUBWAY","departureTime":"14:00","durationMinutes":45,"estimatedCost":2000,"note":"지하철 2호선 해운대역 방향"},
+                  {"fromLocation":{"name":"해운대 해수욕장","address":"264 Haeundaehaebyeon-ro, Haeundae-gu, Busan","lat":35.1587,"lng":129.1604,"type":"PARK","description":"부산 대표 해수욕장"},"toLocation":{"name":"광안리 해수욕장","address":"219 Gwanganhaebyeon-ro, Suyeong-gu, Busan","lat":35.1532,"lng":129.1182,"type":"PARK","description":"광안대교 야경 명소"},"transport":"BUS","departureTime":"16:30","durationMinutes":20,"estimatedCost":1600,"note":"버스 이동"},
+                  {"fromLocation":{"name":"광안리 해수욕장","address":"219 Gwanganhaebyeon-ro, Suyeong-gu, Busan","lat":35.1532,"lng":129.1182,"type":"PARK","description":"광안대교 야경 명소"},"toLocation":{"name":"파라다이스 호텔 부산 (Paradise Hotel Busan)","address":"296 Haeundaehaebyeon-ro, Haeundae-gu, Busan","lat":35.1621,"lng":129.1660,"type":"HOTEL","description":"해운대 특급 호텔"},"transport":"BUS","departureTime":"20:00","durationMinutes":20,"estimatedCost":1600,"note":"버스 이동 후 체크인"}
+                ]}""".formatted(dayNumber, d);
+        }
+
+        // 삿포로
+        if (destination != null && (destination.contains("삿포로") || destination.contains("Sapporo"))) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"삿포로역 (札幌駅)","address":"Kita 6 Jonishi, Kita-ku, Sapporo","lat":43.0686,"lng":141.3506,"type":"STATION","description":"삿포로 중앙역"},"toLocation":{"name":"오도리 공원 (大通公園)","address":"Odori Nishi, Chuo-ku, Sapporo","lat":43.0600,"lng":141.3530,"type":"PARK","description":"삿포로 중심 공원"},"transport":"WALK","departureTime":"09:30","durationMinutes":15,"estimatedCost":0,"note":"삿포로역 남쪽 방향 도보"},
+                  {"fromLocation":{"name":"오도리 공원 (大通公園)","address":"Odori Nishi, Chuo-ku, Sapporo","lat":43.0600,"lng":141.3530,"type":"PARK","description":"삿포로 중심 공원"},"toLocation":{"name":"삿포로 시계탑 (時計台)","address":"1 Kita Ichijo Nishi, Chuo-ku, Sapporo","lat":43.0644,"lng":141.3535,"type":"MUSEUM","description":"삿포로 대표 랜드마크"},"transport":"WALK","departureTime":"10:30","durationMinutes":10,"estimatedCost":200,"note":"오도리 공원에서 도보"},
+                  {"fromLocation":{"name":"삿포로 시계탑 (時計台)","address":"1 Kita Ichijo Nishi, Chuo-ku, Sapporo","lat":43.0644,"lng":141.3535,"type":"MUSEUM","description":"삿포로 대표 랜드마크"},"toLocation":{"name":"스프카레 가라쿠 삿포로점 (スープカレーGARAKU)","address":"1F, South 1, West 4, Chuo-ku, Sapporo","lat":43.0579,"lng":141.3531,"type":"RESTAURANT","description":"삿포로 명물 스프카레 원조 맛집"},"transport":"WALK","departureTime":"11:30","durationMinutes":20,"estimatedCost":1200,"note":"도보 이동 후 점심"},
+                  {"fromLocation":{"name":"스프카레 가라쿠 삿포로점 (スープカレーGARAKU)","address":"1F, South 1, West 4, Chuo-ku, Sapporo","lat":43.0579,"lng":141.3531,"type":"RESTAURANT","description":"삿포로 명물 스프카레 원조 맛집"},"toLocation":{"name":"삿포로 맥주 박물관 (サッポロビール博物館)","address":"9-2-10 Kita 7 Johigashi, Higashi-ku, Sapporo","lat":43.0719,"lng":141.3694,"type":"MUSEUM","description":"일본 최초 맥주 박물관·시음 가능"},"transport":"SUBWAY","departureTime":"13:00","durationMinutes":20,"estimatedCost":200,"note":"지하철 도자이선 이용"},
+                  {"fromLocation":{"name":"삿포로 맥주 박물관 (サッポロビール博物館)","address":"9-2-10 Kita 7 Johigashi, Higashi-ku, Sapporo","lat":43.0719,"lng":141.3694,"type":"MUSEUM","description":"일본 최초 맥주 박물관·시음 가능"},"toLocation":{"name":"스스키노 (ススキノ)","address":"Minami 5 Jonishi, Chuo-ku, Sapporo","lat":43.0548,"lng":141.3561,"type":"ETC","description":"홋카이도 최대 환락가·맛집 밀집"},"transport":"SUBWAY","departureTime":"16:00","durationMinutes":20,"estimatedCost":200,"note":"지하철 이용"},
+                  {"fromLocation":{"name":"스스키노 (ススキノ)","address":"Minami 5 Jonishi, Chuo-ku, Sapporo","lat":43.0548,"lng":141.3561,"type":"ETC","description":"홋카이도 최대 환락가·맛집 밀집"},"toLocation":{"name":"JR 타워 호텔 닛코 삿포로 (JR Tower Hotel Nikko Sapporo)","address":"2 Kita 5 Jonishi, Chuo-ku, Sapporo","lat":43.0683,"lng":141.3503,"type":"HOTEL","description":"삿포로역 직결 특급 호텔"},"transport":"SUBWAY","departureTime":"20:00","durationMinutes":15,"estimatedCost":200,"note":"지하철 이용 복귀"}
+                ]}""".formatted(dayNumber, d);
+        }
+
+        // 후쿠오카
+        if (destination != null && (destination.contains("후쿠오카") || destination.contains("Fukuoka"))) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"하카타역 (博多駅)","address":"1-1 Hakataekichuogai, Hakata-ku, Fukuoka","lat":33.5902,"lng":130.4207,"type":"STATION","description":"후쿠오카 중앙역"},"toLocation":{"name":"카와바타 상점가 (川端商店街)","address":"1-Chome Kawabata-machi, Hakata-ku, Fukuoka","lat":33.5985,"lng":130.4161,"type":"SHOPPING","description":"후쿠오카 전통 아케이드 상점가"},"transport":"SUBWAY","departureTime":"09:30","durationMinutes":10,"estimatedCost":210,"note":"지하철 공항선 나카스카와바타 방향"},
+                  {"fromLocation":{"name":"카와바타 상점가 (川端商店街)","address":"1-Chome Kawabata-machi, Hakata-ku, Fukuoka","lat":33.5985,"lng":130.4161,"type":"SHOPPING","description":"후쿠오카 전통 아케이드 상점가"},"toLocation":{"name":"이치란 라멘 본점 (一蘭 総本店)","address":"1-3-6 Daimyo, Chuo-ku, Fukuoka","lat":33.5914,"lng":130.3977,"type":"RESTAURANT","description":"이치란 라멘 발상지 본점"},"transport":"SUBWAY","departureTime":"11:00","durationMinutes":10,"estimatedCost":210,"note":"지하철 공항선 텐진 방향"},
+                  {"fromLocation":{"name":"이치란 라멘 본점 (一蘭 総本店)","address":"1-3-6 Daimyo, Chuo-ku, Fukuoka","lat":33.5914,"lng":130.3977,"type":"RESTAURANT","description":"이치란 라멘 발상지 본점"},"toLocation":{"name":"다이묘 거리 (大名エリア)","address":"Daimyo, Chuo-ku, Fukuoka","lat":33.5920,"lng":130.3970,"type":"SHOPPING","description":"후쿠오카 트렌디 쇼핑·카페 거리"},"transport":"WALK","departureTime":"12:30","durationMinutes":5,"estimatedCost":0,"note":"이치란 본점 바로 근처"},
+                  {"fromLocation":{"name":"다이묘 거리 (大名エリア)","address":"Daimyo, Chuo-ku, Fukuoka","lat":33.5920,"lng":130.3970,"type":"SHOPPING","description":"후쿠오카 트렌디 쇼핑·카페 거리"},"toLocation":{"name":"오호리 공원 (大濠公園)","address":"1-2 Ohori Park, Chuo-ku, Fukuoka","lat":33.5882,"lng":130.3752,"type":"PARK","description":"후쿠오카 최대 호수 공원"},"transport":"SUBWAY","departureTime":"14:30","durationMinutes":15,"estimatedCost":210,"note":"지하철 공항선 → 나나쿠마선 이용"},
+                  {"fromLocation":{"name":"오호리 공원 (大濠公園)","address":"1-2 Ohori Park, Chuo-ku, Fukuoka","lat":33.5882,"lng":130.3752,"type":"PARK","description":"후쿠오카 최대 호수 공원"},"toLocation":{"name":"캐널 시티 하카타 (Canal City Hakata)","address":"1-2 Sumiyoshi, Hakata-ku, Fukuoka","lat":33.5887,"lng":130.4115,"type":"SHOPPING","description":"후쿠오카 대형 쇼핑몰"},"transport":"SUBWAY","departureTime":"16:30","durationMinutes":20,"estimatedCost":210,"note":"지하철 이용"},
+                  {"fromLocation":{"name":"캐널 시티 하카타 (Canal City Hakata)","address":"1-2 Sumiyoshi, Hakata-ku, Fukuoka","lat":33.5887,"lng":130.4115,"type":"SHOPPING","description":"후쿠오카 대형 쇼핑몰"},"toLocation":{"name":"하카타 엑셀 호텔 토큐 (Hakata Excel Hotel Tokyu)","address":"1-17 Hakata-Ekimae, Hakata-ku, Fukuoka","lat":33.5901,"lng":130.4179,"type":"HOTEL","description":"하카타역 인근 호텔"},"transport":"WALK","departureTime":"20:00","durationMinutes":10,"estimatedCost":0,"note":"도보 이동 후 체크인"}
+                ]}""".formatted(dayNumber, d);
+        }
+
+        // 나고야
+        if (destination != null && (destination.contains("나고야") || destination.contains("Nagoya"))) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"나고야역 (名古屋駅)","address":"1-1-4 Meieki, Nakamura-ku, Nagoya","lat":35.1706,"lng":136.8816,"type":"STATION","description":"나고야 중앙역"},"toLocation":{"name":"나고야성 (名古屋城)","address":"1-1 Honmaru, Naka-ku, Nagoya","lat":35.1856,"lng":136.8994,"type":"MUSEUM","description":"나고야 대표 성곽"},"transport":"SUBWAY","departureTime":"09:30","durationMinutes":20,"estimatedCost":270,"note":"지하철 메이조선 시야쿠쇼 방향"},
+                  {"fromLocation":{"name":"나고야성 (名古屋城)","address":"1-1 Honmaru, Naka-ku, Nagoya","lat":35.1856,"lng":136.8994,"type":"MUSEUM","description":"나고야 대표 성곽"},"toLocation":{"name":"오스 상점가 (大須商店街)","address":"2-21-47 Osu, Naka-ku, Nagoya","lat":35.1601,"lng":136.9001,"type":"SHOPPING","description":"나고야 최대 전통 쇼핑 아케이드"},"transport":"SUBWAY","departureTime":"12:00","durationMinutes":20,"estimatedCost":270,"note":"지하철 메이조선 이용"},
+                  {"fromLocation":{"name":"오스 상점가 (大須商店街)","address":"2-21-47 Osu, Naka-ku, Nagoya","lat":35.1601,"lng":136.9001,"type":"SHOPPING","description":"나고야 최대 전통 쇼핑 아케이드"},"toLocation":{"name":"야바초 코리안 거리 (矢場町)","address":"Yabamachi, Naka-ku, Nagoya","lat":35.1614,"lng":136.9046,"type":"RESTAURANT","description":"히츠마부시·미소카츠 맛집 밀집"},"transport":"WALK","departureTime":"14:00","durationMinutes":10,"estimatedCost":1500,"note":"도보 이동 후 점심"},
+                  {"fromLocation":{"name":"야바초 코리안 거리 (矢場町)","address":"Yabamachi, Naka-ku, Nagoya","lat":35.1614,"lng":136.9046,"type":"RESTAURANT","description":"히츠마부시·미소카츠 맛집 밀집"},"toLocation":{"name":"나고야 매리어트 어소시아 호텔 (Nagoya Marriott Associa Hotel)","address":"1-1-4 Meieki, Nakamura-ku, Nagoya","lat":35.1706,"lng":136.8816,"type":"HOTEL","description":"나고야역 직결 특급 호텔"},"transport":"SUBWAY","departureTime":"19:00","durationMinutes":20,"estimatedCost":270,"note":"지하철 이용 복귀"}
+                ]}""".formatted(dayNumber, d);
+        }
+
+        // 기본 fallback (여행지 불명)
+        if (isJp) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"호텔","address":"Japan","lat":35.6762,"lng":139.6503,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"지역 관광지","address":"Japan","lat":35.6762,"lng":139.6503,"type":"ETC","description":"지역 유명 관광지"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":500,"note":"도보 이동"},
+                  {"fromLocation":{"name":"지역 관광지","address":"Japan","lat":35.6762,"lng":139.6503,"type":"ETC","description":"지역 유명 관광지"},"toLocation":{"name":"지역 맛집","address":"Japan","lat":35.6762,"lng":139.6503,"type":"RESTAURANT","description":"지역 맛집"},"transport":"WALK","departureTime":"12:00","durationMinutes":30,"estimatedCost":1500,"note":"점심 식사"},
+                  {"fromLocation":{"name":"지역 맛집","address":"Japan","lat":35.6762,"lng":139.6503,"type":"RESTAURANT","description":"지역 맛집"},"toLocation":{"name":"호텔","address":"Japan","lat":35.6762,"lng":139.6503,"type":"HOTEL","description":"숙박지"},"transport":"WALK","departureTime":"19:00","durationMinutes":20,"estimatedCost":200,"note":"저녁 복귀"}
+                ]}""".formatted(dayNumber, d);
+        } else {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"호텔","address":"Korea","lat":37.5665,"lng":126.9780,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"지역 관광지","address":"Korea","lat":37.5665,"lng":126.9780,"type":"ETC","description":"지역 유명 관광지"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":5000,"note":"도보 이동"},
+                  {"fromLocation":{"name":"지역 관광지","address":"Korea","lat":37.5665,"lng":126.9780,"type":"ETC","description":"지역 유명 관광지"},"toLocation":{"name":"지역 맛집","address":"Korea","lat":37.5665,"lng":126.9780,"type":"RESTAURANT","description":"지역 맛집"},"transport":"WALK","departureTime":"12:00","durationMinutes":30,"estimatedCost":12000,"note":"점심 식사"},
+                  {"fromLocation":{"name":"지역 맛집","address":"Korea","lat":37.5665,"lng":126.9780,"type":"RESTAURANT","description":"지역 맛집"},"toLocation":{"name":"호텔","address":"Korea","lat":37.5665,"lng":126.9780,"type":"HOTEL","description":"숙박지"},"transport":"WALK","departureTime":"19:00","durationMinutes":20,"estimatedCost":1500,"note":"저녁 복귀"}
+                ]}""".formatted(dayNumber, d);
+        }
+    }
+    // ── 하드코딩 fallback 끝 ─────────────────────────────────────────
 
     private void validateDateRange(LocalDate start, LocalDate end) {
         if (start == null || end == null) {

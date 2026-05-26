@@ -18,6 +18,7 @@ interface TravelInfo {
   id: number; title: string; startLocation: string; endLocation: string
   startDate: string; endDate: string; totalDays: number
   countryCode: string; withCar: boolean; departureFlightTime?: string; returnFlightTime?: string
+  status?: string
 }
 interface CarRental { id: number; carType: string; dailyRateKrw: number; rentalDays: number; estimatedFuelKrw: number; estimatedTollKrw: number }
 interface Accommodation { id: number; hotelName: string; checkIn: string; checkOut: string; pricePerNightKrw: number }
@@ -41,6 +42,11 @@ const GOOGLE_MAPS_KEY = 'AIzaSyCcBLM2p25kdXeAjFJBxFfo12E7jh-p9tw'
 // ── 상태 타입 ─────────────────────────────────────────
 type DayStatus = 'pending' | 'generating' | 'done' | 'error'
 
+// ── 상태 뱃지 ─────────────────────────────────────
+const STATUS_LABEL: Record<string, string> = { DRAFT: '계획 중', CONFIRMED: '확정됨', COMPLETED: '완료' }
+const STATUS_COLOR: Record<string, string> = { DRAFT: '#0984E3', CONFIRMED: '#00B894', COMPLETED: '#888' }
+const STATUS_BG:    Record<string, string> = { DRAFT: '#EBF4FF', CONFIRMED: '#E8FAF5', COMPLETED: '#F5F5F5' }
+
 export default function TravelPlannerPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -57,6 +63,11 @@ export default function TravelPlannerPage() {
   const [loading, setLoading]           = useState(true)
   // 지도 탭을 처음 열었을 때만 MapView 마운트 (display:none 상태에서 Google Maps 초기화 방지)
   const [mapEverShown, setMapEverShown] = useState(false)
+
+  // 제목 인라인 편집
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft]     = useState('')
+  const [statusUpdating, setStatusUpdating] = useState(false)
 
   const autoGenTriggered = useRef(false)  // StrictMode 이중 호출 방지
 
@@ -127,6 +138,36 @@ export default function TravelPlannerPage() {
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // ── 여행 상태 변경 ─────────────────────────────────
+  const updateStatus = async (newStatus: string) => {
+    setStatusUpdating(true)
+    try {
+      const res = await fetch(`/api/v1/travels/${id}`, {
+        method: 'PATCH',
+        headers: { ...h(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      const data = await res.json()
+      if (res.ok && data.data) setTravel(t => t ? { ...t, status: data.data.status } : t)
+    } catch { /* ignore */ }
+    setStatusUpdating(false)
+  }
+
+  // ── 제목 인라인 저장 ────────────────────────────────
+  const saveTitle = async () => {
+    if (!titleDraft.trim()) { setEditingTitle(false); return }
+    try {
+      const res = await fetch(`/api/v1/travels/${id}`, {
+        method: 'PATCH',
+        headers: { ...h(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: titleDraft.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok && data.data) setTravel(t => t ? { ...t, title: data.data.title } : t)
+    } catch { /* ignore */ }
+    setEditingTitle(false)
+  }
 
   // ── Day 생성 ──────────────────────────────────────
   const generateDay = useCallback(async (dayNum: number) => {
@@ -209,8 +250,35 @@ export default function TravelPlannerPage() {
 
           {/* 여행 헤더 */}
           <div style={{ background: 'linear-gradient(135deg, #0284C7, #38BDF8)', padding: '20px 20px 24px' }}>
-            <button onClick={() => navigate('/travels')} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, color: 'rgba(255,255,255,0.9)', fontSize: '0.78rem', marginBottom: 14, cursor: 'pointer', padding: '5px 10px', fontFamily: 'inherit', fontWeight: 500 }}>← 목록으로</button>
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', marginBottom: 4 }}>{travel?.title ?? '여행 플래너'}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <button onClick={() => navigate('/travels')} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, color: 'rgba(255,255,255,0.9)', fontSize: '0.78rem', cursor: 'pointer', padding: '5px 10px', fontFamily: 'inherit', fontWeight: 500 }}>← 목록으로</button>
+              {/* 상태 뱃지 */}
+              {travel?.status && (
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: STATUS_BG[travel.status] ?? '#F5F5F5', color: STATUS_COLOR[travel.status] ?? '#888' }}>
+                  {STATUS_LABEL[travel.status] ?? travel.status}
+                </span>
+              )}
+            </div>
+            {/* 제목 (클릭하면 편집) */}
+            {editingTitle ? (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+                <input
+                  autoFocus
+                  value={titleDraft}
+                  onChange={e => setTitleDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false) }}
+                  style={{ flex: 1, fontSize: '0.92rem', fontWeight: 700, borderRadius: 6, border: 'none', padding: '4px 8px', background: 'rgba(255,255,255,0.9)', color: '#1A1A1A', outline: 'none', fontFamily: 'inherit' }}
+                />
+                <button onClick={saveTitle} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 6, color: '#fff', padding: '4px 10px', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>저장</button>
+              </div>
+            ) : (
+              <h2 onClick={() => { setTitleDraft(travel?.title ?? ''); setEditingTitle(true) }}
+                title="클릭하여 제목 편집"
+                style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', marginBottom: 4, cursor: 'text', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {travel?.title ?? '여행 플래너'}
+                <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>✏️</span>
+              </h2>
+            )}
             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <span>📍 {travel?.startLocation} → {travel?.endLocation}</span>
               <span>·</span>
@@ -430,6 +498,31 @@ export default function TravelPlannerPage() {
               })}
             </div>
 
+          </div>
+
+          {/* ── 상태 변경 버튼 (사이드바 하단) ── */}
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-lt)', background: '#F8FAFC', flexShrink: 0 }}>
+            {travel?.status === 'DRAFT' && (
+              <button onClick={() => updateStatus('CONFIRMED')} disabled={statusUpdating} style={{
+                width: '100%', padding: '10px', borderRadius: 10, border: 'none',
+                background: 'linear-gradient(135deg, #00B894, #00CEC9)', color: '#fff',
+                fontSize: '0.82rem', fontWeight: 800, cursor: 'pointer', opacity: statusUpdating ? 0.6 : 1,
+              }}>
+                {statusUpdating ? '변경 중...' : '✅ 여행 확정하기'}
+              </button>
+            )}
+            {travel?.status === 'CONFIRMED' && (
+              <button onClick={() => updateStatus('COMPLETED')} disabled={statusUpdating} style={{
+                width: '100%', padding: '10px', borderRadius: 10, border: 'none',
+                background: 'linear-gradient(135deg, #636E72, #B2BEC3)', color: '#fff',
+                fontSize: '0.82rem', fontWeight: 800, cursor: 'pointer', opacity: statusUpdating ? 0.6 : 1,
+              }}>
+                {statusUpdating ? '변경 중...' : '🏁 여행 완료 처리'}
+              </button>
+            )}
+            {travel?.status === 'COMPLETED' && (
+              <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#888', padding: '6px 0' }}>🏅 완료된 여행이에요</div>
+            )}
           </div>
 
         </aside>

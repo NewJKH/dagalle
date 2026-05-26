@@ -2,6 +2,7 @@ package org.jkh.com.dagalle.domain.travel.dto;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.jkh.com.dagalle.domain.travel.entity.TravelStatus;
 
 import java.time.LocalDate;
 
@@ -13,4 +14,5 @@ public class TravelUpdateRequest {
     private String endLocation;
     private LocalDate startDate;
     private LocalDate endDate;
+    private TravelStatus status;   // DRAFT → CONFIRMED → COMPLETED
 }

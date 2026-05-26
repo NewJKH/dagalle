@@ -136,4 +136,12 @@ public class TravelPlan {
     public void confirm() {
         this.status = TravelStatus.CONFIRMED;
     }
+
+    public void updateStatus(TravelStatus newStatus) {
+        this.status = newStatus;
+    }
+
+    public void updateTitle(String newTitle) {
+        if (newTitle != null && !newTitle.isBlank()) this.title = newTitle;
+    }
 }

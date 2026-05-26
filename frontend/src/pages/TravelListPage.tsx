@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { DEST_EMOJI, DEST_IMG } from '../constants/locations'
@@ -29,7 +29,17 @@ export default function TravelListPage() {
   const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [filter, setFilter]     = useState<'all' | 'upcoming' | 'completed'>('all')
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
   const navigate = useNavigate()
+
+  const handleDelete = async (id: number) => {
+    const token = localStorage.getItem('accessToken')
+    try {
+      await fetch(`/api/v1/travels/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      setPlans(p => p.filter(t => t.id !== id))
+    } catch { /* ignore */ }
+    setConfirmDelete(null)
+  }
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
@@ -92,7 +102,7 @@ export default function TravelListPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {filtered.map(plan => (
-              <TravelCard key={plan.id} plan={plan} onClick={() => navigate(`/travels/${plan.id}`)} />
+              <TravelCard key={plan.id} plan={plan} onClick={() => navigate(`/travels/${plan.id}`)} onDelete={e => { e.stopPropagation(); setConfirmDelete(plan.id) }} />
             ))}
           </div>
         )}
@@ -104,12 +114,28 @@ export default function TravelListPage() {
           onCreated={plan => { setPlans(p => [plan, ...p]); setShowCreate(false); navigate(`/travels/${plan.id}`) }}
         />
       )}
+
+      {confirmDelete !== null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setConfirmDelete(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 28px', width: 360, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: '2.5rem', textAlign: 'center', marginBottom: 16 }}>🗑️</div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1A1A1A', textAlign: 'center', marginBottom: 8 }}>여행을 삭제할까요?</h3>
+            <p style={{ fontSize: '0.85rem', color: '#888', textAlign: 'center', marginBottom: 24 }}>삭제된 여행 계획은 복구할 수 없어요.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1.5px solid #E0E0E0', background: '#fff', fontSize: '0.9rem', fontWeight: 700, color: '#666', cursor: 'pointer' }}>취소</button>
+              <button onClick={() => handleDelete(confirmDelete)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#FF5640', fontSize: '0.9rem', fontWeight: 800, color: '#fff', cursor: 'pointer' }}>삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 /* ── 여행 카드 ── */
-function TravelCard({ plan, onClick }: { plan: TravelPlan; onClick: () => void }) {
+function TravelCard({ plan, onClick, onDelete }: { plan: TravelPlan; onClick: () => void; onDelete: (e: React.MouseEvent) => void }) {
   const st    = STATUS_MAP[plan.status] ?? STATUS_MAP.DRAFT
   const emoji = DEST_EMOJI[plan.endLocation] ?? '✈️'
   const img   = DEST_IMG[plan.endLocation]
@@ -151,7 +177,17 @@ function TravelCard({ plan, onClick }: { plan: TravelPlan; onClick: () => void }
             </>
           )}
         </div>
-        <span style={{ color: '#CCC', fontSize: '1rem', flexShrink: 0 }}>›</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <button onClick={onDelete} title="여행 삭제" style={{
+            width: 32, height: 32, borderRadius: 8, border: '1px solid #F0F0F0',
+            background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', cursor: 'pointer', color: '#CCC', transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#FF5640'; (e.currentTarget as HTMLButtonElement).style.color = '#FF5640'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF3F1' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#F0F0F0'; (e.currentTarget as HTMLButtonElement).style.color = '#CCC'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF' }}
+          >🗑️</button>
+          <span style={{ color: '#CCC', fontSize: '1rem' }}>›</span>
+        </div>
       </div>
     </div>
   )

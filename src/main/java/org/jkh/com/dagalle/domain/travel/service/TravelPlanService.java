@@ -91,6 +91,9 @@ public class TravelPlanService {
         TravelPlan travel = getOwnerTravel(userId, travelId);
         travel.update(request.getTitle(), request.getStartLocation(), request.getEndLocation(),
                 request.getStartDate(), request.getEndDate());
+        if (request.getStatus() != null) {
+            travel.updateStatus(request.getStatus());
+        }
         return TravelResponse.from(travel);
     }
 

@@ -77,16 +77,16 @@ export default function Navbar() {
                 padding: '7px 16px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600,
                 color: solid ? '#333' : 'rgba(255,255,255,0.9)',
                 border: `1.5px solid ${solid ? '#E0E0E0' : 'rgba(255,255,255,0.3)'}`,
-                transition: 'all 0.15s',
+                transition: 'all 0.15s', textDecoration: 'none',
               }}>내 여행</Link>
-              <button onClick={logout} style={{
-                padding: '7px 16px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600,
-                background: 'var(--primary)', color: '#fff',
+              <Link to="/profile" title="프로필" style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: solid ? 'var(--primary)' : 'rgba(255,255,255,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.9rem', fontWeight: 800, color: '#fff', textDecoration: 'none',
+                border: solid ? 'none' : '1.5px solid rgba(255,255,255,0.4)',
                 transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary-dk)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary)' }}
-              >로그아웃</button>
+              }}>👤</Link>
             </>
           ) : (
             <>

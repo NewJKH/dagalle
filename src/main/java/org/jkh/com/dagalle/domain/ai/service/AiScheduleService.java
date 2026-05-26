@@ -991,8 +991,11 @@ public class AiScheduleService {
                 .travelPlan(travel).dayNumber(dayNumber).date(date).build();
         planDayRepository.save(planDay);
 
+        List<JsonNode> routeNodes = new ArrayList<>();
+        for (JsonNode rn : dayNode.path("routes")) routeNodes.add(rn);
+
         int seq = 1;
-        for (JsonNode routeNode : dayNode.path("routes")) {
+        for (JsonNode routeNode : routeNodes) {
             Location from = resolveLocation(routeNode.path("fromLocation"), date);
             Location to   = resolveLocation(routeNode.path("toLocation"),   date);
             String note   = routeNode.path("note").isMissingNode() ? null : routeNode.path("note").asText(null);
@@ -1008,6 +1011,23 @@ public class AiScheduleService {
                     .build());
         }
         log.info("[저장] day{}({}) {}개 route", dayNumber, date, seq - 1);
+
+        // 마지막 route의 toLocation이 HOTEL이면 → 해당 날짜 숙박 기록 hotelName 갱신
+        if (!routeNodes.isEmpty()) {
+            JsonNode lastRoute = routeNodes.get(routeNodes.size() - 1);
+            JsonNode toLoc = lastRoute.path("toLocation");
+            if ("HOTEL".equalsIgnoreCase(toLoc.path("type").asText(""))) {
+                String hotelName = toLoc.path("name").asText(null);
+                if (hotelName != null && !hotelName.isBlank()) {
+                    accommodationRepository.findByTravelPlanAndCheckInDate(travel, date)
+                            .ifPresent(acc -> {
+                                acc.update(hotelName, null, null, null);
+                                log.info("[숙박 업데이트] day{} → hotelName='{}'", dayNumber, hotelName);
+                            });
+                }
+            }
+        }
+
         return planDay;
     }
 

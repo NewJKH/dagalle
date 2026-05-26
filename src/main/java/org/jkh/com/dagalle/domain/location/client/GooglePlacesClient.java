@@ -23,7 +23,7 @@ public class GooglePlacesClient {
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.formattedAddress," +
             "places.location,places.types,places.rating,places.userRatingCount," +
-            "places.currentOpeningHours.openNow";
+            "places.currentOpeningHours.openNow,places.priceLevel";
 
     private final RestClient restClient;
     private final String apiKey;
@@ -117,7 +117,10 @@ public class GooglePlacesClient {
 
         List<String> types = (List<String>) place.getOrDefault("types", List.of());
 
-        return new GooglePlaceResult(placeId, name, address, lat, lng, rating, reviewCount, isOpenNow, types);
+        // priceLevel: PRICE_LEVEL_FREE / INEXPENSIVE / MODERATE / EXPENSIVE / VERY_EXPENSIVE
+        String priceLevel = (String) place.get("priceLevel");
+
+        return new GooglePlaceResult(placeId, name, address, lat, lng, rating, reviewCount, isOpenNow, types, priceLevel);
     }
 
     public record GooglePlaceResult(
@@ -129,6 +132,7 @@ public class GooglePlacesClient {
             Double rating,
             Integer reviewCount,
             Boolean isOpenNow,
-            List<String> types
+            List<String> types,
+            String priceLevel   // null 가능 (공원·역 등 가격대 없는 장소)
     ) {}
 }

@@ -1112,17 +1112,24 @@ public class AiScheduleService {
 
         int seq = 1;
         for (JsonNode routeNode : routeNodes) {
-            Location from = resolveLocation(routeNode.path("fromLocation"), date);
-            Location to   = resolveLocation(routeNode.path("toLocation"),   date);
-            String note   = routeNode.path("note").isMissingNode() ? null : routeNode.path("note").asText(null);
+            LocationWithCost fromLc = resolveLocation(routeNode.path("fromLocation"), date);
+            LocationWithCost toLc   = resolveLocation(routeNode.path("toLocation"),   date);
+            String note = routeNode.path("note").isMissingNode() ? null : routeNode.path("note").asText(null);
+
+            // 교통비: AI 추정값 (estimatedCost)
+            // 장소비용: Google priceLevel 기반 (placeCost) — 0이면 Google 데이터 없음
+            int transportCost = routeNode.path("estimatedCost").asInt(0);
+            int placeCost     = toLc.placeCost();   // toLocation 소비 비용
+
             planRouteRepository.save(PlanRoute.builder()
                     .planDay(planDay)
                     .sequence(seq++)
-                    .fromLocation(from).toLocation(to)
+                    .fromLocation(fromLc.location()).toLocation(toLc.location())
                     .transport(parseTransport(routeNode.path("transport").asText("WALK")))
                     .departureTime(parseDepartureTime(date, routeNode.path("departureTime").asText("09:00")))
                     .durationMinutes(routeNode.path("durationMinutes").asInt(30))
-                    .estimatedCost(routeNode.path("estimatedCost").asInt(0))
+                    .estimatedCost(transportCost)
+                    .placeCost(placeCost)
                     .note(note)
                     .build());
         }
@@ -1199,7 +1206,10 @@ public class AiScheduleService {
         }
     }
 
-    private Location resolveLocation(JsonNode node, LocalDate date) {
+    /** Google Places 결과와 함께 장소 비용도 반환하는 래퍼 */
+    private record LocationWithCost(Location location, int placeCost) {}
+
+    private LocationWithCost resolveLocation(JsonNode node, LocalDate date) {
         String name        = node.path("name").asText("알 수 없는 장소");
         String address     = node.path("address").asText("");
         double aiLat       = node.path("lat").asDouble(35.6762);
@@ -1211,6 +1221,7 @@ public class AiScheduleService {
         String realAddress = address;
         LocationSource source = LocationSource.AI;
         String externalId = "ai-" + name.replaceAll("\\s+", "-") + "-" + date;
+        int placeCost = 0;   // Google priceLevel 기반으로 결정
 
         try {
             String query = address.isBlank() ? name : name + " " + address;
@@ -1220,23 +1231,24 @@ public class AiScheduleService {
                 GooglePlacesClient.GooglePlaceResult hit = results.get(0);
                 lat = hit.lat(); lng = hit.lng(); realAddress = hit.address();
                 source = LocationSource.GOOGLE;
-                // placeId가 있으면 그대로 저장 (구글 리뷰 URL에 사용)
                 externalId = (hit.placeId() != null && !hit.placeId().isBlank())
                         ? hit.placeId()
                         : "google-" + name.replaceAll("\\s+", "-") + "-" + date;
-                log.info("[Places] '{}' → ({}, {}) placeId={}", name, lat, lng, hit.placeId());
 
-                // 이미 동일한 placeId로 저장된 장소가 있으면 재사용 (중복 방지)
+                // ── Google priceLevel → 장소 예상 비용 ─────────────
+                placeCost = priceLevelToKrw(type, hit.priceLevel());
+                log.info("[Places] '{}' → ({}, {}) priceLevel={} → {}원",
+                        name, lat, lng, hit.priceLevel(), placeCost);
+
+                // 기존 Location 재사용 (중복 방지)
                 if (hit.placeId() != null && !hit.placeId().isBlank()) {
                     Optional<Location> existing = locationRepository.findByExternalIdAndSource(hit.placeId(), LocationSource.GOOGLE);
                     if (existing.isPresent()) {
                         log.info("[Places] '{}' 기존 Location 재사용 id={}", name, existing.get().getId());
-                        return existing.get();
+                        return new LocationWithCost(existing.get(), placeCost);
                     }
                 }
             } else {
-                // 구글에서 찾지 못한 장소 — AI가 만들어낸 가능성이 높음
-                // description에 경고 표시, 이름 앞에 마커 추가
                 log.warn("[Places] '{}' 구글 검색 결과 없음 — 존재하지 않는 장소일 수 있음", name);
                 name = "⚠️ " + name;
                 description = (description != null ? description + "\n" : "") +
@@ -1248,10 +1260,59 @@ public class AiScheduleService {
 
         final String finalName = name;
         final String finalDesc = description;
-        return locationRepository.save(Location.builder()
+        Location saved = locationRepository.save(Location.builder()
                 .name(finalName).address(realAddress).lat(lat).lng(lng).type(type)
                 .source(source).externalId(externalId).description(finalDesc)
                 .build());
+        return new LocationWithCost(saved, placeCost);
+    }
+
+    /**
+     * Google Places priceLevel → 1인 예상 KRW 비용.
+     * 교통비(estimatedCost)와는 별개로 해당 장소에서 소비하는 금액.
+     */
+    private int priceLevelToKrw(LocationType type, String priceLevel) {
+        if (priceLevel == null) {
+            // priceLevel 없는 장소: 타입별 기본값 (공원·역 등은 0)
+            return switch (type) {
+                case MUSEUM   -> 12_000;   // 일반 박물관 입장료 평균
+                case PARK     -> 0;
+                case STATION, AIRPORT -> 0;
+                case HOTEL    -> 0;        // 숙박은 accommodation 따로 계산
+                default       -> 0;
+            };
+        }
+        return switch (priceLevel) {
+            case "PRICE_LEVEL_FREE"        -> 0;
+            case "PRICE_LEVEL_INEXPENSIVE" -> switch (type) {
+                case RESTAURANT -> 10_000;
+                case CAFE       -> 5_000;
+                case SHOPPING   -> 15_000;
+                case MUSEUM     -> 5_000;
+                default         -> 5_000;
+            };
+            case "PRICE_LEVEL_MODERATE"    -> switch (type) {
+                case RESTAURANT -> 22_000;
+                case CAFE       -> 9_000;
+                case SHOPPING   -> 35_000;
+                case MUSEUM     -> 15_000;
+                default         -> 10_000;
+            };
+            case "PRICE_LEVEL_EXPENSIVE"   -> switch (type) {
+                case RESTAURANT -> 55_000;
+                case CAFE       -> 18_000;
+                case SHOPPING   -> 60_000;
+                case MUSEUM     -> 25_000;
+                default         -> 25_000;
+            };
+            case "PRICE_LEVEL_VERY_EXPENSIVE" -> switch (type) {
+                case RESTAURANT -> 120_000;
+                case CAFE       -> 30_000;
+                case SHOPPING   -> 100_000;
+                default         -> 50_000;
+            };
+            default -> 0;
+        };
     }
 
     private String getAccommodationTypeLabel(String countryCode, int score) {

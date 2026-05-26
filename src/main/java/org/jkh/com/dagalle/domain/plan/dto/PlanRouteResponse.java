@@ -19,8 +19,9 @@ public class PlanRouteResponse {
     private LocalDateTime departureTime;
     private Integer durationMinutes;
     private Double distanceKm;
-    private Integer estimatedCost;
-    private String note;   // 이동수단 상세 (예: "후쿠오카공항→벳푸 고속버스 2시간")
+    private Integer estimatedCost;  // 교통비
+    private Integer placeCost;      // 장소 소비 비용 (입장료·식사비 등, Google priceLevel 기반)
+    private String note;            // 이동수단 상세
 
     public static PlanRouteResponse from(PlanRoute route) {
         return PlanRouteResponse.builder()
@@ -49,6 +50,7 @@ public class PlanRouteResponse {
                 .durationMinutes(route.getDurationMinutes())
                 .distanceKm(route.getDistanceKm())
                 .estimatedCost(route.getEstimatedCost())
+                .placeCost(route.getPlaceCost())
                 .note(route.getNote())
                 .build();
     }

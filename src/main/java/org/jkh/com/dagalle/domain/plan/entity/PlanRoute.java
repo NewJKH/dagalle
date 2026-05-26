@@ -44,6 +44,13 @@ public class PlanRoute {
     @Column(name = "estimated_cost")
     private Integer estimatedCost;
 
+    /**
+     * 도착 장소에서 소모되는 비용 (입장료·식사비·쇼핑 등).
+     * Google Places priceLevel 기반으로 산출. 교통비(estimatedCost)와 별개.
+     */
+    @Column(name = "place_cost")
+    private Integer placeCost;
+
     /** Routes API로 계산된 실제 이동거리 (km) */
     @Column(name = "distance_km")
     private Double distanceKm;
@@ -55,7 +62,8 @@ public class PlanRoute {
     @Builder
     public PlanRoute(PlanDay planDay, Integer sequence, Location fromLocation, Location toLocation,
                      TransportType transport, LocalDateTime departureTime,
-                     Integer durationMinutes, Integer estimatedCost, Double distanceKm, String note) {
+                     Integer durationMinutes, Integer estimatedCost, Integer placeCost,
+                     Double distanceKm, String note) {
         this.planDay = planDay;
         this.sequence = sequence;
         this.fromLocation = fromLocation;
@@ -64,6 +72,7 @@ public class PlanRoute {
         this.departureTime = departureTime;
         this.durationMinutes = durationMinutes;
         this.estimatedCost = estimatedCost;
+        this.placeCost = placeCost;
         this.distanceKm = distanceKm;
         this.note = note;
     }

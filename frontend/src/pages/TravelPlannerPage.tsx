@@ -12,6 +12,7 @@ interface Route {
   from: LocationInfo; to: LocationInfo
   transport: string; departureTime: string
   durationMinutes: number; distanceKm: number | null; estimatedCost: number
+  placeCost?: number | null   // 장소 소비 비용 (Google priceLevel 기반)
   note?: string | null
 }
 interface Day { dayNumber: number; date: string; routes: Route[] }
@@ -729,11 +730,11 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
   if (!routes || routes.length === 0) return null
 
   // 장소 목록 추출: routes[0].from, 이후 각 routes[i].to
-  const places: Array<{ loc: LocationInfo; arrivalTime: string; stayMins: number; idx: number }> = []
+  const places: Array<{ loc: LocationInfo; arrivalTime: string; stayMins: number; idx: number; placeCost: number }> = []
 
   // 첫 번째 장소 (출발지)
   const firstDepart = toHHmm(routes[0].departureTime)
-  places.push({ loc: routes[0].from, arrivalTime: firstDepart, stayMins: 0, idx: -1 })
+  places.push({ loc: routes[0].from, arrivalTime: firstDepart, stayMins: 0, idx: -1, placeCost: 0 })
 
   for (let i = 0; i < routes.length; i++) {
     const r = routes[i]
@@ -741,7 +742,7 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
     const arrivalTime = addMinutes(departTime, r.durationMinutes)
     const nextDepartTime = i + 1 < routes.length ? toHHmm(routes[i + 1].departureTime) : ''
     const stayMins = nextDepartTime ? diffMinutes(arrivalTime, nextDepartTime) : 0
-    places.push({ loc: r.to, arrivalTime, stayMins, idx: i })
+    places.push({ loc: r.to, arrivalTime, stayMins, idx: i, placeCost: r.placeCost ?? 0 })
   }
 
 
@@ -810,6 +811,11 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', background: locColor, padding: '2px 8px', borderRadius: 6 }}>
                     {isFirst ? '🚀 ' : '📍 '}{place.arrivalTime} 도착
                   </span>
+                  {place.placeCost > 0 && (
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: locColor, background: locBg, border: `1px solid ${locColor}40`, padding: '2px 8px', borderRadius: 6 }}>
+                      💳 {place.placeCost.toLocaleString()}원~
+                    </span>
+                  )}
                   {/* 교통 정체 여유 (CAR 이동 후) */}
                   {carBuf > 0 && (
                     <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 7px', borderRadius: 6, border: '1px solid #FDE68A' }}>

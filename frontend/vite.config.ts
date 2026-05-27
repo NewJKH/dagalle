@@ -4,6 +4,10 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // sockjs-client가 브라우저에서 Node.js 전역변수를 참조하는 문제 해결
+    global: 'globalThis',
+  },
   server: {
     port: 5173,
     proxy: {

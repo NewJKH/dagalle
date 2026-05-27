@@ -113,7 +113,7 @@ public class AiScheduleService {
         TravelPlan travel = createTravelByRule(user, req, totalDays);
 
         // Claude 1회: 1일차만 생성 (나머지는 사용자가 순서대로 생성)
-        generateDay(userId, travel.getId(), 1);
+        generateDay(userId, travel.getId(), 1, null);
 
         log.info("[AI generate 완료] travelId={}", travel.getId());
         return TravelResponse.from(travel);
@@ -165,7 +165,7 @@ public class AiScheduleService {
     // ──────────────────────────────────────────────
 
     @Transactional
-    public PlanDayResponse generateDay(Long userId, Long travelId, int dayNumber) {
+    public PlanDayResponse generateDay(Long userId, Long travelId, int dayNumber, String userWish) {
         TravelPlan travel = getAccessibleTravel(userId, travelId);
         int totalDays = (int) daysBetween(travel.getStartDate(), travel.getEndDate());
         LocalDate date = travel.getStartDate().plusDays(dayNumber - 1);
@@ -174,7 +174,8 @@ public class AiScheduleService {
                 .ifPresent(planDayRepository::delete);
         planDayRepository.flush();
 
-        log.info("[AI generateDay] travelId={}, day={}/{}", travelId, dayNumber, totalDays);
+        log.info("[AI generateDay] travelId={}, day={}/{}, wish='{}'", travelId, dayNumber, totalDays,
+                userWish != null ? userWish : "없음");
 
         String prevLastLocation = resolvePrevLastLocation(travel, dayNumber);
         String accommodationHint = accommodationRepository.findByTravelPlan(travel).stream()
@@ -191,7 +192,7 @@ public class AiScheduleService {
                             travel.getFoodScore(), travel.getAccommodationScore(),
                             travel.getExtremeScore(), travel.getTransportScore()),
                     buildDayUserMessage(travel, dayNumber, totalDays, date,
-                            prevLastLocation, accommodationHint.trim(), flightHint, nightviewUsed));
+                            prevLastLocation, accommodationHint.trim(), flightHint, nightviewUsed, userWish));
         } catch (Exception e) {
             log.warn("[AI generateDay] Claude 호출 실패 → 하드코딩 fallback. day={}, dest={}, err={}",
                     dayNumber, travel.getEndLocation(), e.getMessage());
@@ -990,16 +991,19 @@ public class AiScheduleService {
     private String buildDayUserMessage(TravelPlan travel, int dayNum, int totalDays,
                                        LocalDate date, String prevLocation,
                                        String accommodationHint, String flightHint,
-                                       boolean nightviewUsed) {
+                                       boolean nightviewUsed, String userWish) {
         String transport = travel.isWithCar()
                 ? "렌트카(공항↔도시=TRAIN/BUS필수, 지역간=CAR, 관광지내=WALK)"
                 : "대중교통(공항↔도시=TRAIN/BUS, 도심=SUBWAY/BUS, 근거리=WALK)";
         String nightviewNote = nightviewUsed
                 ? "⚠️ 이미 이전 Day에 야경·전망대 포함됨 → 이 Day에는 야경·전망대 절대 배치 금지."
                 : "야경·전망대는 전체 여행에서 딱 1회 — 이번이 처음이면 넣어도 되나 반드시 19:00 이후.";
+        String wishNote = (userWish != null && !userWish.isBlank())
+                ? "\n🎯 사용자 요청사항(최우선 반영): " + userWish
+                : "";
         return String.format(
                 "여행지:%s | %d일차/%d일 | %s | 인원:%d명 | %s | 테마:%s | 키워드:%s\n" +
-                "이전날마지막위치:%s | 숙소:%s | %s\n%s\n%d일차 JSON.",
+                "이전날마지막위치:%s | 숙소:%s | %s\n%s%s\n%d일차 JSON.",
                 travel.getEndLocation(), dayNum, totalDays, date,
                 travel.getMemberCount() != null ? travel.getMemberCount() : 2,
                 transport,
@@ -1010,6 +1014,7 @@ public class AiScheduleService {
                 accommodationHint.isEmpty() ? "미정" : accommodationHint,
                 flightHint,
                 nightviewNote,
+                wishNote,
                 dayNum);
     }
 

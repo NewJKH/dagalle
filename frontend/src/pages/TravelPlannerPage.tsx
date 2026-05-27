@@ -98,7 +98,8 @@ export default function TravelPlannerPage() {
   const [unreadCount, setUnreadCount]   = useState(0)
   const showChatRef = useRef(false)
 
-  const autoGenTriggered = useRef(false)  // StrictMode 이중 호출 방지
+  // Day별 사용자 희망사항 프롬프트
+  const [dayPrompts, setDayPrompts] = useState<Record<number, string>>({})
 
   const authFetch = useAuthFetch()
 
@@ -182,23 +183,8 @@ export default function TravelPlannerPage() {
         if (me) setMyRole(me.role)
       }
 
-      // 아직 1일차가 없으면 자동 생성 시작 (StrictMode 이중 호출 방지)
-      if (loadedDays.length === 0 && tRes?.data && !autoGenTriggered.current) {
-        autoGenTriggered.current = true
-        setDayStatus(s => ({ ...s, 1: 'generating' }))
-        authFetch(`/api/v1/travels/${tRes.data.id}/ai/day/1`, { method: 'POST' })
-          .then(r => r.json())
-          .then(d => {
-            if (d.data) {
-              setDays([d.data])
-              setDayStatus(s => ({ ...s, 1: 'done' }))
-              setSelectedDay(1)
-            } else {
-              setDayStatus(s => ({ ...s, 1: 'error' }))
-            }
-          })
-          .catch(() => setDayStatus(s => ({ ...s, 1: 'error' })))
-      }
+      // 아직 어떤 day도 없으면 → 1일차 pending으로 두기 (사용자가 프롬프트 입력 후 생성)
+      // 과거 자동 생성 로직 제거 — 이제 DayPendingCard에서 직접 생성
     }).catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,10 +222,16 @@ export default function TravelPlannerPage() {
   }
 
   // ── Day 생성 ──────────────────────────────────────
-  const generateDay = useCallback(async (dayNum: number) => {
+  const generateDay = useCallback(async (dayNum: number, wish?: string) => {
     setDayStatus(s => ({ ...s, [dayNum]: 'generating' }))
+    setSelectedDay(dayNum)
     try {
-      const res = await authFetch(`/api/v1/travels/${id}/ai/day/${dayNum}`, { method: 'POST' })
+      const body = wish?.trim() ? JSON.stringify({ userWish: wish.trim() }) : undefined
+      const res = await authFetch(`/api/v1/travels/${id}/ai/day/${dayNum}`, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body,
+      })
       const data = await res.json()
       if (res.ok && data.data) {
         setDays(prev => {
@@ -247,7 +239,8 @@ export default function TravelPlannerPage() {
           return [...filtered, data.data].sort((a, b) => a.dayNumber - b.dayNumber)
         })
         setDayStatus(s => ({ ...s, [dayNum]: 'done' }))
-        setSelectedDay(dayNum)
+        // 프롬프트 초기화
+        setDayPrompts(p => { const n = { ...p }; delete n[dayNum]; return n })
         // 비용 요약 갱신
         authFetch(`/api/v1/travels/${id}/cost/summary`)
           .then(r => r.json()).then(d => { if (d.data) setCostSummary(d.data) })
@@ -515,13 +508,13 @@ export default function TravelPlannerPage() {
 
                 return (
                   <div key={dayNum}
-                    onClick={() => status === 'done' && setSelectedDay(dayNum)}
+                    onClick={() => setSelectedDay(dayNum)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '10px 12px', borderRadius: 12,
                       border: isSel ? '1.5px solid var(--sky-pale)' : '1.5px solid transparent',
                       background: isSel ? 'var(--sky-bg)' : 'transparent',
-                      cursor: status === 'done' ? 'pointer' : 'default',
+                      cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                   >
@@ -656,15 +649,24 @@ export default function TravelPlannerPage() {
 
             {/* 생성 대기 상태 */}
             {dayStatus[selectedDay] === 'pending' && (
-              <DayPendingCard dayNum={selectedDay} prevDone={selectedDay === 1 || dayStatus[selectedDay - 1] === 'done'} onGenerate={() => generateDay(selectedDay)} />
+              <DayPendingCard
+                dayNum={selectedDay}
+                prevDone={selectedDay === 1 || dayStatus[selectedDay - 1] === 'done'}
+                wish={dayPrompts[selectedDay] ?? ''}
+                onWishChange={v => setDayPrompts(p => ({ ...p, [selectedDay]: v }))}
+                onGenerate={wish => generateDay(selectedDay, wish)}
+              />
             )}
             {dayStatus[selectedDay] === 'generating' && <DayGeneratingCard dayNum={selectedDay} />}
             {dayStatus[selectedDay] === 'error' && (
-              <div style={{ textAlign: 'center', padding: '60px 32px', background: '#fff', borderRadius: 20, border: '1px solid var(--border-lt)' }}>
-                <div style={{ fontSize: '3rem', marginBottom: 12 }}>⚠️</div>
-                <p style={{ color: 'var(--text3)', marginBottom: 20 }}>생성 중 오류가 발생했어요.</p>
-                <button onClick={() => generateDay(selectedDay)} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', fontWeight: 700, background: 'linear-gradient(135deg, #FBBF24, #F59E0B)', color: '#fff', cursor: 'pointer' }}>다시 시도</button>
-              </div>
+              <DayPendingCard
+                dayNum={selectedDay}
+                prevDone={selectedDay === 1 || dayStatus[selectedDay - 1] === 'done'}
+                wish={dayPrompts[selectedDay] ?? ''}
+                onWishChange={v => setDayPrompts(p => ({ ...p, [selectedDay]: v }))}
+                onGenerate={wish => generateDay(selectedDay, wish)}
+                isError
+              />
             )}
 
             {/* Day 완성 — 타임라인 */}
@@ -673,7 +675,7 @@ export default function TravelPlannerPage() {
                 <PlaceTimeline routes={currentDay.routes} />
                 {/* 다음 Day 생성 유도 */}
                 {selectedDay < totalDays && dayStatus[selectedDay + 1] === 'pending' && (
-                  <NextDayBanner dayNum={selectedDay + 1} onGenerate={() => generateDay(selectedDay + 1)} />
+                  <NextDayBanner dayNum={selectedDay + 1} onGenerate={() => setSelectedDay(selectedDay + 1)} />
                 )}
                 {/* AI 수정 요청 입력창 */}
                 <DayModifyBox
@@ -789,21 +791,104 @@ export default function TravelPlannerPage() {
 
 // ── 서브 컴포넌트 ──────────────────────────────────────
 
-function DayPendingCard({ dayNum, prevDone, onGenerate }: { dayNum: number; prevDone: boolean; onGenerate: () => void }) {
+const WISH_EXAMPLES = [
+  '맛집 위주로 짜줘',
+  '쇼핑 많이 넣어줘',
+  '박물관·문화 중심으로',
+  '자연 경관 위주로',
+  '여유롭게 느긋한 일정',
+  '야경 꼭 포함해줘',
+  '카페 투어 넣어줘',
+  '현지인 동네 탐방',
+]
+
+function DayPendingCard({
+  dayNum, prevDone, wish, onWishChange, onGenerate, isError
+}: {
+  dayNum: number
+  prevDone: boolean
+  wish: string
+  onWishChange: (v: string) => void
+  onGenerate: (wish: string) => void
+  isError?: boolean
+}) {
   return (
-    <div style={{ textAlign: 'center', padding: '72px 32px', background: '#fff', borderRadius: 20, border: '2px dashed var(--border)' }}>
-      <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>✨</div>
-      <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: 8 }}>{dayNum}일차 일정을 만들어볼까요?</h3>
-      {!prevDone ? (
-        <p style={{ color: 'var(--text3)', fontSize: '0.85rem' }}>{dayNum - 1}일차를 먼저 완성해주세요.</p>
-      ) : (
-        <>
-          <p style={{ color: 'var(--text3)', fontSize: '0.85rem', marginBottom: 24 }}>Claude AI가 {dayNum}일차 동선을 생성합니다. (~15초)</p>
-          <button onClick={onGenerate} style={{ padding: '14px 32px', borderRadius: 14, border: 'none', fontSize: '1rem', fontWeight: 700, background: 'linear-gradient(135deg, #FBBF24, #F59E0B)', color: '#fff', boxShadow: '0 6px 20px rgba(245,158,11,0.4)', cursor: 'pointer' }}>
-            ✨ {dayNum}일차 생성하기
-          </button>
-        </>
-      )}
+    <div style={{ background: '#fff', borderRadius: 20, border: isError ? '2px solid #FECACA' : '2px dashed var(--border)', overflow: 'hidden', animation: 'fadeUp 0.35s ease both' }}>
+      {/* 헤더 */}
+      <div style={{ background: isError ? 'linear-gradient(135deg, #FEF2F2, #FFF1F1)' : 'linear-gradient(135deg, #FFFBEB, #FEF3C7)', padding: '32px 32px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '3rem', marginBottom: 12 }}>{isError ? '⚠️' : '✨'}</div>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 6, color: isError ? '#B91C1C' : '#1e293b' }}>
+          {isError ? `${dayNum}일차 생성 중 오류가 발생했어요` : `${dayNum}일차 일정을 어떻게 만들어드릴까요?`}
+        </h3>
+        <p style={{ color: 'var(--text3)', fontSize: '0.82rem' }}>
+          {isError
+            ? '아래에 원하는 스타일을 입력하고 다시 시도해보세요.'
+            : `원하는 스타일을 적어주시면 AI가 맞춤 일정을 만들어드려요. (~15초)`}
+        </p>
+      </div>
+
+      {/* 프롬프트 입력 영역 */}
+      <div style={{ padding: '20px 28px 28px' }}>
+        {!prevDone ? (
+          <div style={{ textAlign: 'center', padding: '20px', background: '#F8FAFC', borderRadius: 12, color: 'var(--text3)', fontSize: '0.85rem' }}>
+            ⚠️ {dayNum - 1}일차를 먼저 완성해주세요.
+          </div>
+        ) : (
+          <>
+            {/* 예시 칩 */}
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: 8 }}>💡 이런 스타일 어때요?</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+              {WISH_EXAMPLES.map(ex => (
+                <button key={ex} onClick={() => onWishChange(ex)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 20, border: '1px solid #FDE68A',
+                    background: wish === ex ? '#FEF3C7' : '#fff', color: '#92400E',
+                    fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                  }}>{ex}</button>
+              ))}
+            </div>
+
+            {/* 텍스트 입력 */}
+            <textarea
+              value={wish}
+              onChange={e => onWishChange(e.target.value)}
+              placeholder={`예: "오전엔 카페 투어, 오후엔 박물관, 저녁은 야경 맛집 코스로 짜줘"`}
+              rows={3}
+              maxLength={300}
+              style={{
+                width: '100%', borderRadius: 12, border: '1.5px solid #FDE68A',
+                padding: '12px 14px', fontSize: '0.85rem', lineHeight: 1.6,
+                resize: 'vertical', outline: 'none', fontFamily: 'inherit',
+                color: '#1e293b', background: '#FFFBEB', boxSizing: 'border-box',
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#F59E0B'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245,158,11,0.15)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#FDE68A'; e.currentTarget.style.boxShadow = 'none' }}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onGenerate(wish) }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+              <span style={{ fontSize: '0.63rem', color: '#9CA3AF' }}>비워두면 AI가 자유롭게 구성 · ⌘+Enter로 생성</span>
+              <span style={{ fontSize: '0.63rem', color: '#9CA3AF' }}>{wish.length}/300</span>
+            </div>
+
+            {/* 생성 버튼 */}
+            <button
+              onClick={() => onGenerate(wish)}
+              style={{
+                width: '100%', marginTop: 16, padding: '14px', borderRadius: 14, border: 'none',
+                fontSize: '1rem', fontWeight: 700,
+                background: 'linear-gradient(135deg, #FBBF24, #F59E0B)',
+                color: '#fff', boxShadow: '0 6px 20px rgba(245,158,11,0.4)',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 24px rgba(245,158,11,0.5)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = ''; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 20px rgba(245,158,11,0.4)' }}
+            >
+              {isError ? `🔄 ${dayNum}일차 다시 생성하기` : `✨ ${dayNum}일차 일정 만들기`}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -826,7 +911,7 @@ function NextDayBanner({ dayNum, onGenerate }: { dayNum: number; onGenerate: () 
         <div style={{ fontSize: '0.82rem', color: 'var(--text3)' }}>{dayNum}일차 일정도 만들어 볼까요?</div>
       </div>
       <button onClick={onGenerate} style={{ padding: '12px 22px', borderRadius: 12, border: 'none', fontWeight: 700, fontSize: '0.9rem', background: 'linear-gradient(135deg, var(--sky-lt), var(--sky-dk))', color: '#fff', boxShadow: '0 4px 14px rgba(14,165,233,0.3)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        ✨ {dayNum}일차 생성
+        → {dayNum}일차로 이동
       </button>
     </div>
   )

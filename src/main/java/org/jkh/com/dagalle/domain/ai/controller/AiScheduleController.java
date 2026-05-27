@@ -10,6 +10,7 @@ import org.jkh.com.dagalle.common.security.UserPrincipal;
 import org.jkh.com.dagalle.domain.ai.dto.AiFillRequest;
 import org.jkh.com.dagalle.domain.ai.dto.AiGenerateRequest;
 import org.jkh.com.dagalle.domain.ai.dto.AiNaturalRequest;
+import org.jkh.com.dagalle.domain.ai.dto.DayGenerateRequest;
 import org.jkh.com.dagalle.domain.ai.dto.DayModifyRequest;
 import org.jkh.com.dagalle.domain.ai.service.AiScheduleService;
 import org.jkh.com.dagalle.domain.plan.dto.PlanDayResponse;
@@ -40,14 +41,16 @@ public class AiScheduleController {
     }
 
     @Operation(summary = "AI Day 단건 생성 (또는 재생성)",
-            description = "특정 Day의 일정을 Claude AI로 생성. 기존 Day가 있으면 삭제 후 재생성.")
+            description = "특정 Day의 일정을 Claude AI로 생성. 기존 Day가 있으면 삭제 후 재생성. userWish로 원하는 스타일 전달 가능.")
     @PostMapping("/{travelId}/ai/day/{dayNumber}")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<PlanDayResponse> generateDay(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long travelId,
-            @PathVariable Integer dayNumber) {
-        return ApiResponse.ok(aiScheduleService.generateDay(principal.getId(), travelId, dayNumber));
+            @PathVariable Integer dayNumber,
+            @Valid @RequestBody(required = false) DayGenerateRequest request) {
+        String userWish = (request != null) ? request.getUserWish() : null;
+        return ApiResponse.ok(aiScheduleService.generateDay(principal.getId(), travelId, dayNumber, userWish));
     }
 
     @Operation(summary = "자유 입력으로 AI 일정 생성",

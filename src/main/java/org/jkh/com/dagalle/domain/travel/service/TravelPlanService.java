@@ -3,7 +3,9 @@ package org.jkh.com.dagalle.domain.travel.service;
 import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
+import org.jkh.com.dagalle.common.websocket.WebSocketEventPublisher;
 import org.jkh.com.dagalle.domain.accommodation.repository.AccommodationRepository;
+import org.jkh.com.dagalle.domain.chat.repository.ChatMessageRepository;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.entity.LocationSource;
 import org.jkh.com.dagalle.domain.location.entity.LocationType;
@@ -15,6 +17,8 @@ import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
 import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
 import org.jkh.com.dagalle.domain.rental.repository.CarRentalRepository;
 import org.jkh.com.dagalle.domain.travel.dto.InviteRequest;
+import org.jkh.com.dagalle.domain.travel.dto.MemberResponse;
+import org.jkh.com.dagalle.domain.travel.dto.RoleChangeRequest;
 import org.jkh.com.dagalle.domain.travel.dto.SampleImportRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelCreateRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelResponse;
@@ -47,8 +51,10 @@ public class TravelPlanService {
     private final PlanRouteRepository planRouteRepository;
     private final AccommodationRepository accommodationRepository;
     private final CarRentalRepository carRentalRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
+    private final WebSocketEventPublisher publisher;
 
     @Transactional
     public TravelResponse create(Long userId, TravelCreateRequest request) {
@@ -150,42 +156,76 @@ public class TravelPlanService {
 
     @Transactional
     public void delete(Long userId, Long travelId) {
-        TravelPlan travel = getOwnerTravel(userId, travelId);
+        TravelPlan travel = getLeaderTravel(userId, travelId);  // 리더만 삭제 가능
         // FK 제약 위반 방지: 자식 엔티티 순서대로 삭제
-        planRouteRepository.deleteByTravelPlanId(travelId);   // plan_routes (planDay → travelPlan)
-        planDayRepository.deleteByTravelPlanId(travelId);     // plan_days
-        accommodationRepository.deleteByTravelPlan(travel);   // accommodations
-        carRentalRepository.deleteByTravelPlan(travel);       // car_rentals
-        travelMemberRepository.deleteByTravelPlan(travel);    // travel_members
+        planRouteRepository.deleteByTravelPlanId(travelId);
+        planDayRepository.deleteByTravelPlanId(travelId);
+        accommodationRepository.deleteByTravelPlan(travel);
+        carRentalRepository.deleteByTravelPlan(travel);
+        chatMessageRepository.deleteByTravelPlanId(travelId);
+        travelMemberRepository.deleteByTravelPlan(travel);
         travelPlanRepository.delete(travel);
     }
 
+    /** 멤버 목록 조회 */
+    @Transactional(readOnly = true)
+    public List<MemberResponse> getMembers(Long userId, Long travelId) {
+        TravelPlan travel = getAccessibleTravel(userId, travelId);
+        return travelMemberRepository.findByTravelPlanWithUser(travel)
+                .stream().map(MemberResponse::from).toList();
+    }
+
+    /** 초대 — 리더만 가능, 역할 지정 가능 (기본 MEMBER) */
     @Transactional
-    public void invite(Long userId, Long travelId, InviteRequest request) {
-        TravelPlan travel = getOwnerTravel(userId, travelId);
+    public MemberResponse invite(Long userId, Long travelId, InviteRequest request) {
+        TravelPlan travel = getLeaderTravel(userId, travelId);
         User invitee = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         if (travelMemberRepository.existsByTravelPlanAndUser(travel, invitee)) {
             throw new BusinessException(ErrorCode.ALREADY_MEMBER);
         }
-        TravelMember member = TravelMember.builder()
-                .travelPlan(travel)
-                .user(invitee)
-                .role(MemberRole.MEMBER)
-                .build();
-        travelMemberRepository.save(member);
+        MemberRole role = request.getRole() != null ? request.getRole() : MemberRole.MEMBER;
+        TravelMember member = travelMemberRepository.save(TravelMember.builder()
+                .travelPlan(travel).user(invitee).role(role).build());
+        MemberResponse resp = MemberResponse.from(member);
+        publisher.publishMemberUpdate(travelId, java.util.Map.of("type", "INVITED", "member", resp));
+        return resp;
     }
 
+    /** 강퇴 — 리더만 가능, 리더는 강퇴 불가 */
     @Transactional
-    public void removeMember(Long ownerId, Long travelId, Long memberId) {
-        TravelPlan travel = getOwnerTravel(ownerId, travelId);
-        User target = getUser(memberId);
+    public void removeMember(Long leaderId, Long travelId, Long targetUserId) {
+        TravelPlan travel = getLeaderTravel(leaderId, travelId);
+        User target = getUser(targetUserId);
         if (travelMemberRepository.existsByTravelPlanAndUserAndRole(travel, target, MemberRole.OWNER)) {
             throw new BusinessException(ErrorCode.OWNER_CANNOT_LEAVE);
         }
         TravelMember member = travelMemberRepository.findByTravelPlanAndUser(travel, target)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         travelMemberRepository.delete(member);
+        publisher.publishMemberUpdate(travelId, java.util.Map.of("type", "KICKED", "userId", targetUserId));
+    }
+
+    /** 역할 변경 — 리더만 가능, 자기 자신 변경 불가, 마지막 리더 강등 불가 */
+    @Transactional
+    public MemberResponse changeRole(Long leaderId, Long travelId, Long targetUserId, RoleChangeRequest request) {
+        TravelPlan travel = getLeaderTravel(leaderId, travelId);
+        if (leaderId.equals(targetUserId)) {
+            throw new BusinessException(ErrorCode.CANNOT_CHANGE_OWN_ROLE);
+        }
+        User target = getUser(targetUserId);
+        TravelMember member = travelMemberRepository.findByTravelPlanAndUser(travel, target)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        // 마지막 리더를 비리더로 강등하려는 시도 방지
+        if (member.getRole() == MemberRole.OWNER && request.getRole() != MemberRole.OWNER) {
+            long leaderCount = travelMemberRepository.findByTravelPlan(travel).stream()
+                    .filter(m -> m.getRole() == MemberRole.OWNER).count();
+            if (leaderCount <= 1) throw new BusinessException(ErrorCode.LAST_LEADER);
+        }
+        member.updateRole(request.getRole());
+        MemberResponse resp = MemberResponse.from(member);
+        publisher.publishMemberUpdate(travelId, java.util.Map.of("type", "ROLE_CHANGED", "member", resp));
+        return resp;
     }
 
     /**
@@ -313,11 +353,15 @@ public class TravelPlanService {
     }
 
     private TravelPlan getOwnerTravel(Long userId, Long travelId) {
+        return getLeaderTravel(userId, travelId);
+    }
+
+    private TravelPlan getLeaderTravel(Long userId, Long travelId) {
         TravelPlan travel = travelPlanRepository.findById(travelId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
         User user = getUser(userId);
         if (!travelMemberRepository.existsByTravelPlanAndUserAndRole(travel, user, MemberRole.OWNER)) {
-            throw new BusinessException(ErrorCode.TRAVEL_ACCESS_DENIED);
+            throw new BusinessException(ErrorCode.LEADER_ONLY);
         }
         return travel;
     }

@@ -33,4 +33,8 @@ public class TravelMember {
         this.user = user;
         this.role = role;
     }
+
+    public void updateRole(MemberRole newRole) {
+        this.role = newRole;
+    }
 }

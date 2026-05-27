@@ -3,7 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import MapView from '../components/MapView'
 import type { MapRoute } from '../components/MapView'
+import GroupChat from '../components/GroupChat'
+import MemberPanel from '../components/MemberPanel'
 import { useAuthFetch } from '../hooks/useAuthFetch'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 // ── 타입 정의 ─────────────────────────────────────────
 interface LocationInfo { id: number; name: string; lat: number; lng: number; description?: string | null; address?: string | null; type?: string | null; placeId?: string | null }
@@ -31,6 +34,21 @@ interface CostSummary {
   perPersonKrw: number
   memberCount: number
   breakdown: { transport: number; fuel: number; accommodation: number; rental: number; flight: number; food: number; etc: number }
+}
+interface ChatMsg {
+  id: number
+  senderId: number
+  senderName: string
+  content: string
+  sentAt: string
+}
+interface MemberInfo {
+  memberId: number
+  userId: number
+  username: string
+  email: string
+  role: 'OWNER' | 'MEMBER' | 'VIEWER'
+  roleDisplay: string
 }
 
 // ── 교통수단 스타일 ───────────────────────────────────
@@ -71,9 +89,52 @@ export default function TravelPlannerPage() {
   const [titleDraft, setTitleDraft]     = useState('')
   const [statusUpdating, setStatusUpdating] = useState(false)
 
+  // 실시간 협업
+  const [myUserId, setMyUserId]         = useState<number>(0)
+  const [myRole, setMyRole]             = useState<'OWNER' | 'MEMBER' | 'VIEWER'>('VIEWER')
+  const [showChat, setShowChat]         = useState(false)
+  const [showMembers, setShowMembers]   = useState(false)
+  const [newChatMsg, setNewChatMsg]     = useState<ChatMsg | null>(null)
+  const [unreadCount, setUnreadCount]   = useState(0)
+  const showChatRef = useRef(false)
+
   const autoGenTriggered = useRef(false)  // StrictMode 이중 호출 방지
 
   const authFetch = useAuthFetch()
+
+  // ── WebSocket 실시간 이벤트 ─────────────────────────
+  const travelIdNum = id ? parseInt(id) : null
+
+  useWebSocket({
+    travelId: travelIdNum,
+    onScheduleUpdate: (data: any) => {
+      // type: DAY_UPDATED → 해당 day를 state에 반영
+      if (data?.type === 'DAY_UPDATED' && data?.day) {
+        const updatedDay: Day = data.day
+        setDays(prev => {
+          const filtered = prev.filter(d => d.dayNumber !== updatedDay.dayNumber)
+          return [...filtered, updatedDay].sort((a, b) => a.dayNumber - b.dayNumber)
+        })
+        setDayStatus(s => ({ ...s, [updatedDay.dayNumber]: 'done' }))
+      }
+    },
+    onMemberUpdate: (_data: any) => {
+      // 멤버 변경 시 역할 새로고침
+      authFetch(`/api/v1/travels/${id}/members`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.success && Array.isArray(d.data)) {
+            const me = d.data.find((m: MemberInfo) => m.userId === myUserId)
+            if (me) setMyRole(me.role)
+          }
+        })
+        .catch(() => {})
+    },
+    onChatMessage: (msg: ChatMsg) => {
+      setNewChatMsg(msg)
+      if (!showChatRef.current) setUnreadCount(n => n + 1)
+    },
+  })
 
   // ── 초기 데이터 로딩 ──────────────────────────────
   useEffect(() => {
@@ -90,7 +151,9 @@ export default function TravelPlannerPage() {
       authFetch(`/api/v1/travels/${id}/rental`).then(rentalJson),
       authFetch(`/api/v1/travels/${id}/accommodations`).then(safeJson),
       authFetch(`/api/v1/travels/${id}/cost/summary`).then(safeJson),
-    ]).then(([tRes, dRes, rRes, aRes, cRes]) => {
+      authFetch('/api/v1/users/me').then(safeJson),
+      authFetch(`/api/v1/travels/${id}/members`).then(safeJson),
+    ]).then(([tRes, dRes, rRes, aRes, cRes, meRes, mRes]) => {
       if (tRes?.data) setTravel(tRes.data)
       const loadedDays: Day[] = dRes?.data ?? []
       setDays(loadedDays)
@@ -110,6 +173,14 @@ export default function TravelPlannerPage() {
       if (rRes?.data) setCarRental(rRes.data)
       if (Array.isArray(aRes?.data)) setAccomm(aRes.data)
       if (cRes?.data) setCostSummary(cRes.data)
+
+      // 현재 유저 ID 및 역할 설정
+      const meId: number = meRes?.data?.id ?? meRes?.data?.userId ?? 0
+      if (meId) setMyUserId(meId)
+      if (Array.isArray(mRes?.data) && meId) {
+        const me = mRes.data.find((m: MemberInfo) => m.userId === meId)
+        if (me) setMyRole(me.role)
+      }
 
       // 아직 1일차가 없으면 자동 생성 시작 (StrictMode 이중 호출 방지)
       if (loadedDays.length === 0 && tRes?.data && !autoGenTriggered.current) {
@@ -625,6 +696,87 @@ export default function TravelPlannerPage() {
           </div>
         </main>
       </div>
+
+      {/* ── 실시간 협업 FAB 버튼들 ─────────────────────── */}
+      <div style={{
+        position: 'fixed', left: 24, bottom: 24,
+        display: 'flex', flexDirection: 'column', gap: 10, zIndex: 999,
+      }}>
+        {/* 멤버 버튼 */}
+        <button
+          onClick={() => setShowMembers(v => !v)}
+          title="그룹 멤버"
+          style={{
+            width: 48, height: 48, borderRadius: '50%', border: 'none', cursor: 'pointer',
+            background: showMembers
+              ? 'linear-gradient(135deg, #F97316, #EA580C)'
+              : 'linear-gradient(135deg, #fff, #f8fafc)',
+            color: showMembers ? '#fff' : '#F97316',
+            fontSize: '1.3rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s',
+            border: showMembers ? 'none' : '2px solid #FED7AA',
+          } as React.CSSProperties}
+        >
+          👥
+        </button>
+
+        {/* 채팅 버튼 */}
+        <button
+          onClick={() => {
+            const next = !showChatRef.current
+            showChatRef.current = next
+            setShowChat(next)
+            if (next) setUnreadCount(0)
+          }}
+          title="그룹 채팅"
+          style={{
+            width: 48, height: 48, borderRadius: '50%', border: 'none', cursor: 'pointer',
+            background: showChat
+              ? 'linear-gradient(135deg, #0EA5E9, #0284C7)'
+              : 'linear-gradient(135deg, #fff, #f8fafc)',
+            color: showChat ? '#fff' : '#0EA5E9',
+            fontSize: '1.3rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s',
+            position: 'relative',
+            border: showChat ? 'none' : '2px solid #BAE6FD',
+          } as React.CSSProperties}
+        >
+          💬
+          {unreadCount > 0 && !showChat && (
+            <span style={{
+              position: 'absolute', top: -4, right: -4,
+              background: '#EF4444', color: '#fff', borderRadius: '50%',
+              width: 18, height: 18, fontSize: '0.65rem', fontWeight: 800,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(239,68,68,0.5)',
+            }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* 그룹 채팅 패널 */}
+      {showChat && myUserId > 0 && (
+        <GroupChat
+          travelId={travelIdNum!}
+          myUserId={myUserId}
+          newMessage={newChatMsg}
+          onClose={() => setShowChat(false)}
+        />
+      )}
+
+      {/* 멤버 패널 */}
+      {showMembers && myUserId > 0 && (
+        <MemberPanel
+          travelId={travelIdNum!}
+          myUserId={myUserId}
+          myRole={myRole}
+          onClose={() => setShowMembers(false)}
+        />
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }

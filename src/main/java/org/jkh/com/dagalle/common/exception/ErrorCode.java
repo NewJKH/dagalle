@@ -24,7 +24,10 @@ public enum ErrorCode {
     TRAVEL_ACCESS_DENIED(HttpStatus.FORBIDDEN, "FORBIDDEN", "해당 여행에 접근 권한이 없습니다"),
     ALREADY_MEMBER(HttpStatus.CONFLICT, "CONFLICT", "이미 팀원으로 등록된 사용자입니다"),
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "팀원을 찾을 수 없습니다"),
-    OWNER_CANNOT_LEAVE(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "OWNER는 내보낼 수 없습니다"),
+    OWNER_CANNOT_LEAVE(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "리더는 내보낼 수 없습니다"),
+    LEADER_ONLY(HttpStatus.FORBIDDEN, "FORBIDDEN", "리더만 수행할 수 있는 작업입니다"),
+    CANNOT_CHANGE_OWN_ROLE(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "자신의 역할은 변경할 수 없습니다"),
+    LAST_LEADER(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "마지막 리더는 제거하거나 변경할 수 없습니다"),
 
     // Plan
     DAY_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "해당 날짜 일정을 찾을 수 없습니다"),

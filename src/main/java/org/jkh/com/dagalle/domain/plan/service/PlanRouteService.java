@@ -4,9 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
+import org.jkh.com.dagalle.common.websocket.WebSocketEventPublisher;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
 import org.jkh.com.dagalle.domain.plan.client.GoogleRoutesClient;
+import org.jkh.com.dagalle.domain.plan.dto.PlanDayResponse;
 import org.jkh.com.dagalle.domain.plan.dto.PlanRouteResponse;
 import org.jkh.com.dagalle.domain.plan.fare.TransitFareRegistry;
 import org.jkh.com.dagalle.domain.plan.dto.ReorderRequest;
@@ -17,6 +19,7 @@ import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
 import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
 import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
+import org.jkh.com.dagalle.domain.travel.entity.MemberRole;
 import org.jkh.com.dagalle.domain.travel.entity.TravelPlan;
 import org.jkh.com.dagalle.domain.travel.repository.TravelMemberRepository;
 import org.jkh.com.dagalle.domain.travel.repository.TravelPlanRepository;
@@ -42,35 +45,27 @@ public class PlanRouteService {
     private final UserRepository userRepository;
     private final GoogleRoutesClient googleRoutesClient;
     private final TransitFareRegistry transitFareRegistry;
+    private final WebSocketEventPublisher publisher;
 
     @Transactional
     public PlanRouteResponse addRoute(Long userId, Long travelId, Integer dayNumber, RouteAddRequest request) {
-        PlanDay day = getAccessibleDay(userId, travelId, dayNumber);
+        PlanDay day = getEditableDay(userId, travelId, dayNumber); // 팀원 이상 가능
         Location from = locationRepository.findById(request.getFromLocationId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_NOT_FOUND));
         Location to = locationRepository.findById(request.getToLocationId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_NOT_FOUND));
-        // Google Routes API로 실제 거리/시간 계산 (실패 시 요청값 사용)
+
         Double distanceKm = null;
         Integer durationMinutes = request.getDurationMinutes();
-
         GoogleRoutesClient.RouteResult routeResult = googleRoutesClient.computeRoute(
-                from.getLat(), from.getLng(),
-                to.getLat(), to.getLng(),
-                request.getTransport(),
-                request.getDepartureTime()
-        );
+                from.getLat(), from.getLng(), to.getLat(), to.getLng(),
+                request.getTransport(), request.getDepartureTime());
         if (routeResult != null) {
             distanceKm = Math.round(routeResult.distanceKm() * 10.0) / 10.0;
-            // 요청에 durationMinutes가 없으면 API 결과로 채움
-            if (durationMinutes == null) {
-                durationMinutes = routeResult.durationMinutes();
-            }
-            log.info("Routes API: {}→{} {}km {}분",
-                    from.getName(), to.getName(), distanceKm, routeResult.durationMinutes());
+            if (durationMinutes == null) durationMinutes = routeResult.durationMinutes();
+            log.info("Routes API: {}→{} {}km {}분", from.getName(), to.getName(), distanceKm, routeResult.durationMinutes());
         }
 
-        // Transit 요금 자동 계산 (SUBWAY, BUS, TRAIN이고 estimatedCost가 null인 경우)
         Integer estimatedCost = request.getEstimatedCost();
         TransportType transport = request.getTransport();
         if (estimatedCost == null &&
@@ -83,40 +78,44 @@ public class PlanRouteService {
 
         int nextSeq = planRouteRepository.countByPlanDay(day) + 1;
         PlanRoute route = PlanRoute.builder()
-                .planDay(day)
-                .sequence(nextSeq)
-                .fromLocation(from)
-                .toLocation(to)
+                .planDay(day).sequence(nextSeq)
+                .fromLocation(from).toLocation(to)
                 .transport(transport)
                 .departureTime(request.getDepartureTime())
                 .durationMinutes(durationMinutes)
                 .estimatedCost(estimatedCost)
                 .distanceKm(distanceKm)
                 .build();
-        return PlanRouteResponse.from(planRouteRepository.save(route));
+        PlanRouteResponse result = PlanRouteResponse.from(planRouteRepository.save(route));
+
+        // 실시간 브로드캐스트: 일정 추가
+        publishDayUpdate(travelId, day);
+        return result;
     }
 
     @Transactional
     public void updateRoute(Long userId, Long travelId, Integer dayNumber,
                             Long routeId, RouteUpdateRequest request) {
-        PlanDay day = getAccessibleDay(userId, travelId, dayNumber);
+        PlanDay day = getEditableDay(userId, travelId, dayNumber);
         PlanRoute route = planRouteRepository.findByIdAndPlanDay(routeId, day)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         route.update(request.getTransport(), request.getDepartureTime(),
                 request.getDurationMinutes(), request.getEstimatedCost());
+        publishDayUpdate(travelId, day);
     }
 
     @Transactional
     public void deleteRoute(Long userId, Long travelId, Integer dayNumber, Long routeId) {
-        PlanDay day = getAccessibleDay(userId, travelId, dayNumber);
+        PlanDay day = getLeaderDay(userId, travelId, dayNumber); // 리더만 삭제 가능
         PlanRoute route = planRouteRepository.findByIdAndPlanDay(routeId, day)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         planRouteRepository.delete(route);
+        publishDayUpdate(travelId, day);
     }
 
     @Transactional
     public void reorder(Long userId, Long travelId, Integer dayNumber, ReorderRequest request) {
-        PlanDay day = getAccessibleDay(userId, travelId, dayNumber);
+        PlanDay day = getEditableDay(userId, travelId, dayNumber);
         List<PlanRoute> routes = planRouteRepository.findByPlanDayOrderBySequenceAsc(day);
         Map<Long, PlanRoute> routeMap = routes.stream()
                 .collect(Collectors.toMap(PlanRoute::getId, r -> r));
@@ -125,6 +124,21 @@ public class PlanRouteService {
             PlanRoute route = routeMap.get(order.get(i));
             if (route == null) throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
             route.updateSequence(i + 1);
+        }
+        publishDayUpdate(travelId, day);
+    }
+
+    // ── 실시간 브로드캐스트 ────────────────────────────────
+    private void publishDayUpdate(Long travelId, PlanDay day) {
+        try {
+            // 최신 Day를 다시 로드해서 전체 일정 전파
+            planDayRepository.findByTravelPlanAndDayNumber(day.getTravelPlan(), day.getDayNumber())
+                    .ifPresent(fresh -> publisher.publishScheduleUpdate(travelId,
+                            Map.of("type", "DAY_UPDATED",
+                                   "dayNumber", fresh.getDayNumber(),
+                                   "day", PlanDayResponse.from(fresh))));
+        } catch (Exception e) {
+            log.warn("[WS] 일정 업데이트 브로드캐스트 실패: {}", e.getMessage());
         }
     }
 
@@ -138,13 +152,31 @@ public class PlanRouteService {
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    private PlanDay getAccessibleDay(Long userId, Long travelId, Integer dayNumber) {
+    /** 팀원 이상(MEMBER, OWNER) 접근 가능 */
+    private PlanDay getEditableDay(Long userId, Long travelId, Integer dayNumber) {
         TravelPlan travel = travelPlanRepository.findById(travelId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        if (!travelMemberRepository.existsByTravelPlanAndUser(travel, user)) {
-            throw new BusinessException(ErrorCode.TRAVEL_ACCESS_DENIED);
+        var member = travelMemberRepository.findByTravelPlanAndUser(travel, user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_ACCESS_DENIED));
+        if (!member.getRole().canEditSchedule()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DAY_NOT_FOUND));
+    }
+
+    /** 리더(OWNER)만 접근 가능 */
+    private PlanDay getLeaderDay(Long userId, Long travelId, Integer dayNumber) {
+        TravelPlan travel = travelPlanRepository.findById(travelId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        var member = travelMemberRepository.findByTravelPlanAndUser(travel, user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_ACCESS_DENIED));
+        if (!member.getRole().canDeleteSchedule()) {
+            throw new BusinessException(ErrorCode.LEADER_ONLY);
         }
         return planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DAY_NOT_FOUND));

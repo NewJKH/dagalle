@@ -211,8 +211,17 @@ public class AiScheduleService {
 
         savePlanDay(travel, dayNode, dayNumber, date);
 
+        // flush 후 교정 (lazy load 이슈 방지)
         entityManager.flush();
         entityManager.clear();
+
+        // ── 2일차 이상: 첫 route의 fromLocation을 전날 마지막 toLocation으로 강제 교정 ──
+        if (dayNumber > 1) {
+            fixFirstRouteFromLocation(travel, dayNumber);
+            entityManager.flush();
+            entityManager.clear();
+        }
+
         TravelPlan travelFresh = travelPlanRepository.findById(travelId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRAVEL_NOT_FOUND));
         return planDayRepository.findByTravelPlanAndDayNumber(travelFresh, dayNumber)
@@ -249,6 +258,11 @@ public class AiScheduleService {
 
         JsonNode dayNode = parseJson(raw);
         savePlanDay(travel, dayNode, dayNumber, date);
+
+        // 수정 후에도 전날 마지막 위치 강제 교정
+        if (dayNumber > 1) {
+            fixFirstRouteFromLocation(travel, dayNumber);
+        }
 
         entityManager.flush();
         entityManager.clear();
@@ -316,12 +330,20 @@ public class AiScheduleService {
         String transport = travel.isWithCar()
                 ? "렌트카(공항=TRAIN/BUS, 지역간=CAR, 관광지내=WALK, 구역간반납포함)"
                 : "대중교통(공항=TRAIN/BUS, 도심=SUBWAY/BUS, 근거리=WALK)";
+        // 수정 시에도 이전날 마지막 위치 강제 적용
+        String prevLocationJson = resolvePrevLastLocation(travel, dayNumber);
+        String startConstraint = "";
+        if (!prevLocationJson.isEmpty()) {
+            String cleanJson = prevLocationJson.replace(" [야간이동도착지]", "");
+            startConstraint = "\n⚠️ 첫 route의 fromLocation은 반드시 유지: " + cleanJson + "\n";
+        }
         return String.format(
-                "여행지:%s | %d일차/%d일 | %s | 이동:%s\n" +
+                "여행지:%s | %d일차/%d일 | %s | 이동:%s%s\n" +
                 "【현재 %d일차 일정】\n%s\n" +
                 "【수정 요청】%s\n" +
                 "위 요청을 반영한 %d일차 전체 일정을 JSON으로 출력.",
                 travel.getEndLocation(), dayNumber, totalDays, date, transport,
+                startConstraint,
                 dayNumber, currentJson,
                 userPrompt,
                 dayNumber);
@@ -989,7 +1011,7 @@ public class AiScheduleService {
     }
 
     private String buildDayUserMessage(TravelPlan travel, int dayNum, int totalDays,
-                                       LocalDate date, String prevLocation,
+                                       LocalDate date, String prevLocationJson,
                                        String accommodationHint, String flightHint,
                                        boolean nightviewUsed, String userWish) {
         String transport = travel.isWithCar()
@@ -1001,19 +1023,36 @@ public class AiScheduleService {
         String wishNote = (userWish != null && !userWish.isBlank())
                 ? "\n🎯 사용자 요청사항(최우선 반영): " + userWish
                 : "";
+
+        // 이전날 마지막 위치를 첫 출발지로 강제
+        String startConstraint = "";
+        if (!prevLocationJson.isEmpty()) {
+            boolean isNightTransit = prevLocationJson.contains("[야간이동도착지]");
+            String cleanJson = prevLocationJson.replace(" [야간이동도착지]", "");
+            if (isNightTransit) {
+                startConstraint = String.format(
+                        "\n🚉 야간이동 도착: 이 Day 첫 route의 fromLocation은 반드시 아래 JSON 그대로 사용(야간버스/기차 도착지).\n%s",
+                        cleanJson);
+            } else {
+                startConstraint = String.format(
+                        "\n🏨 전날 숙박지에서 출발: 이 Day 첫 route의 fromLocation은 반드시 아래 JSON 그대로 사용(위도·경도 포함).\n%s",
+                        cleanJson);
+            }
+        }
+
         return String.format(
                 "여행지:%s | %d일차/%d일 | %s | 인원:%d명 | %s | 테마:%s | 키워드:%s\n" +
-                "이전날마지막위치:%s | 숙소:%s | %s\n%s%s\n%d일차 JSON.",
+                "숙소:%s | %s\n%s%s%s\n%d일차 JSON.",
                 travel.getEndLocation(), dayNum, totalDays, date,
                 travel.getMemberCount() != null ? travel.getMemberCount() : 2,
                 transport,
                 travel.getTheme() != null ? travel.getTheme() : "일반관광",
                 travel.getKeywords() != null && !travel.getKeywords().isEmpty()
                         ? travel.getKeywords() : "없음",
-                prevLocation.isEmpty() ? "미정" : prevLocation,
                 accommodationHint.isEmpty() ? "미정" : accommodationHint,
                 flightHint,
                 nightviewNote,
+                startConstraint,
                 wishNote,
                 dayNum);
     }
@@ -1174,13 +1213,69 @@ public class AiScheduleService {
     //  헬퍼
     // ──────────────────────────────────────────────
 
+    /**
+     * N일차 첫 번째 route의 fromLocation을 N-1일차 마지막 route의 toLocation으로 강제 교정.
+     * AI가 프롬프트를 무시하더라도 DB 레벨에서 반드시 연결을 보장한다.
+     */
+    private void fixFirstRouteFromLocation(TravelPlan travel, int dayNumber) {
+        try {
+            planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber - 1)
+                .ifPresent(prevDay -> {
+                    List<PlanRoute> prevRoutes = prevDay.getRoutes();
+                    if (prevRoutes.isEmpty()) return;
+                    Location prevLastTo = prevRoutes.get(prevRoutes.size() - 1).getToLocation();
+                    if (prevLastTo == null) return;
+
+                    planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber)
+                        .ifPresent(currDay -> {
+                            List<PlanRoute> currRoutes = currDay.getRoutes();
+                            if (currRoutes.isEmpty()) return;
+                            PlanRoute firstRoute = currRoutes.get(0);
+                            firstRoute.updateFromLocation(prevLastTo);
+                            planRouteRepository.save(firstRoute);
+                            log.info("[fixFirstRoute] day{} 첫 from → '{}' (day{} 마지막 to)",
+                                    dayNumber, prevLastTo.getName(), dayNumber - 1);
+                        });
+                });
+        } catch (Exception e) {
+            log.warn("[fixFirstRoute] 교정 실패 day={}: {}", dayNumber, e.getMessage());
+        }
+    }
+
+    /**
+     * 이전 Day 마지막 route의 toLocation을 JSON으로 반환.
+     * AI가 다음 Day 첫 fromLocation을 동일 좌표로 사용하도록 강제.
+     * 야간버스/야간기차인 경우도 동일하게 마지막 toLocation(도착지)에서 시작.
+     */
     private String resolvePrevLastLocation(TravelPlan travel, int dayNumber) {
         if (dayNumber <= 1) return "";
         return planDayRepository.findByTravelPlanAndDayNumber(travel, dayNumber - 1)
                 .map(d -> {
                     List<PlanRoute> routes = d.getRoutes();
                     if (routes.isEmpty()) return "";
-                    return routes.get(routes.size() - 1).getToLocation().getName();
+                    org.jkh.com.dagalle.domain.location.entity.Location loc =
+                            routes.get(routes.size() - 1).getToLocation();
+                    if (loc == null) return "";
+                    // 야간 이동 여부 감지 (버스/기차로 2시간 이상 이동 → 도착역/터미널에서 시작)
+                    PlanRoute lastRoute = routes.get(routes.size() - 1);
+                    String transportNote = "";
+                    if (lastRoute.getTransport() != null) {
+                        String t = lastRoute.getTransport().name();
+                        if (("BUS".equals(t) || "TRAIN".equals(t))
+                                && lastRoute.getDurationMinutes() != null
+                                && lastRoute.getDurationMinutes() >= 90) {
+                            transportNote = " [야간이동도착지]";
+                        }
+                    }
+                    // 다음날 첫 fromLocation으로 그대로 쓸 수 있도록 JSON 형태로 반환
+                    return String.format(
+                            "{\"name\":\"%s\",\"lat\":%s,\"lng\":%s,\"address\":\"%s\",\"type\":\"%s\"}%s",
+                            loc.getName(),
+                            loc.getLat() != null ? loc.getLat() : 0.0,
+                            loc.getLng() != null ? loc.getLng() : 0.0,
+                            loc.getAddress() != null ? loc.getAddress().replace("\"", "'") : "",
+                            loc.getType() != null ? loc.getType().name() : "ETC",
+                            transportNote);
                 }).orElse("");
     }
 

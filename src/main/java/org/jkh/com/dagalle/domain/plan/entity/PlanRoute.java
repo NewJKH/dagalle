@@ -88,4 +88,9 @@ public class PlanRoute {
     public void updateSequence(Integer sequence) {
         this.sequence = sequence;
     }
+
+    /** 다음날 첫 출발지 강제 교정용 */
+    public void updateFromLocation(Location fromLocation) {
+        this.fromLocation = fromLocation;
+    }
 }

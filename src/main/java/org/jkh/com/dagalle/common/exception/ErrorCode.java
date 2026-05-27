@@ -47,7 +47,10 @@ public enum ErrorCode {
     ACCOMMODATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "숙박 정보를 찾을 수 없습니다"),
 
     // Rate Limiting
-    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS", "요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.");
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS", "요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
+
+    // AI
+    AI_CREDIT_EXHAUSTED(HttpStatus.SERVICE_UNAVAILABLE, "AI_CREDIT_EXHAUSTED", "AI 크레딧이 소진되었습니다. 관리자에게 문의해주세요.");
 
     private final HttpStatus status;
     private final String code;

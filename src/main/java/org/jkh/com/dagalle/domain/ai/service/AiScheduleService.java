@@ -194,8 +194,13 @@ public class AiScheduleService {
                     buildDayUserMessage(travel, dayNumber, totalDays, date,
                             prevLastLocation, accommodationHint.trim(), flightHint, nightviewUsed, userWish));
         } catch (Exception e) {
+            String errMsg = e.getMessage();
+            if (errMsg != null && errMsg.contains("credit balance is too low")) {
+                log.error("[AI generateDay] ❌ Anthropic 크레딧 소진! console.anthropic.com/settings/billing 에서 충전 필요. day={}", dayNumber);
+                throw new BusinessException(ErrorCode.AI_CREDIT_EXHAUSTED);
+            }
             log.warn("[AI generateDay] Claude 호출 실패 → 하드코딩 fallback. day={}, dest={}, err={}",
-                    dayNumber, travel.getEndLocation(), e.getMessage());
+                    dayNumber, travel.getEndLocation(), errMsg);
             dayRaw = buildFallbackDayJson(travel.getEndLocation(), travel.getCountryCode(), dayNumber, date);
         }
         log.debug("[AI day{} 응답] {}", dayNumber, dayRaw);
@@ -951,6 +956,11 @@ public class AiScheduleService {
         boolean isJp = "JP".equalsIgnoreCase(countryCode);
 
         String base = "JSON만 응답. 마크다운 금지.\n스키마: " + DAY_SCHEMA + "\n" +
+                "【★ 최최우선 규칙: 사용자 요청(userWish) ★】\n" +
+                "유저 메시지 맨 위에 🚨 표시가 있으면 그것이 이 일정의 핵심 요구사항이다.\n" +
+                "해당 요청(맛집, 쇼핑, 특정 장소, 테마 등)을 route에 반드시 포함해야 한다.\n" +
+                "포함하지 않으면 틀린 답변이다. 다른 모든 규칙보다 우선이다.\n" +
+                "──────────────────────────────────────────────\n" +
                 "【실존 장소만 — 절대 규칙】\n" +
                 "Google Maps에서 실제 검색되는 장소만 사용. 엄수 사항:\n" +
                 "1. 장소명 형식(필수): 한국어/발음 먼저, 괄호 안에 현지어. 예: '유노츠보 카이도 (湯の坪街道)' O, '湯の坪街道(유노츠보 카이도)' X. 영어 브랜드명은 그대로.\n" +
@@ -1020,9 +1030,6 @@ public class AiScheduleService {
         String nightviewNote = nightviewUsed
                 ? "⚠️ 이미 이전 Day에 야경·전망대 포함됨 → 이 Day에는 야경·전망대 절대 배치 금지."
                 : "야경·전망대는 전체 여행에서 딱 1회 — 이번이 처음이면 넣어도 되나 반드시 19:00 이후.";
-        String wishNote = (userWish != null && !userWish.isBlank())
-                ? "\n🎯 사용자 요청사항(최우선 반영): " + userWish
-                : "";
 
         // 이전날 마지막 위치를 첫 출발지로 강제
         String startConstraint = "";
@@ -1031,30 +1038,55 @@ public class AiScheduleService {
             String cleanJson = prevLocationJson.replace(" [야간이동도착지]", "");
             if (isNightTransit) {
                 startConstraint = String.format(
-                        "\n🚉 야간이동 도착: 이 Day 첫 route의 fromLocation은 반드시 아래 JSON 그대로 사용(야간버스/기차 도착지).\n%s",
+                        "\n🚉 야간이동 도착: 이 Day 첫 route의 fromLocation은 반드시 아래 JSON 그대로 사용.\n%s",
                         cleanJson);
             } else {
                 startConstraint = String.format(
-                        "\n🏨 전날 숙박지에서 출발: 이 Day 첫 route의 fromLocation은 반드시 아래 JSON 그대로 사용(위도·경도 포함).\n%s",
+                        "\n🏨 전날 숙박지에서 출발: 이 Day 첫 route의 fromLocation은 반드시 아래 JSON 그대로 사용.\n%s",
                         cleanJson);
             }
         }
 
-        return String.format(
-                "여행지:%s | %d일차/%d일 | %s | 인원:%d명 | %s | 테마:%s | 키워드:%s\n" +
-                "숙소:%s | %s\n%s%s%s\n%d일차 JSON.",
-                travel.getEndLocation(), dayNum, totalDays, date,
-                travel.getMemberCount() != null ? travel.getMemberCount() : 2,
-                transport,
-                travel.getTheme() != null ? travel.getTheme() : "일반관광",
-                travel.getKeywords() != null && !travel.getKeywords().isEmpty()
-                        ? travel.getKeywords() : "없음",
-                accommodationHint.isEmpty() ? "미정" : accommodationHint,
-                flightHint,
-                nightviewNote,
-                startConstraint,
-                wishNote,
-                dayNum);
+        boolean hasWish = userWish != null && !userWish.isBlank();
+
+        if (hasWish) {
+            // ── userWish 있을 때: 요청이 핵심, 나머지는 참고 ──────────────────
+            return "═══════════════════════════════════════════════════\n" +
+                   "이 일정의 핵심 목표 (반드시 route에 반영):\n" +
+                   "  ▶ " + userWish.trim() + "\n" +
+                   "위 요청에 포함된 장소·테마·활동을 route에 구체적으로 넣을 것.\n" +
+                   "특정 장소명이 있으면 그 장소가 route에 반드시 등장해야 함.\n" +
+                   "특정 지역이 있으면 그 지역 중심으로 일정을 구성할 것.\n" +
+                   "이 요청을 지키지 않으면 잘못된 일정이다.\n" +
+                   "═══════════════════════════════════════════════════\n" +
+                   String.format(
+                   "참고 정보 | %d일차/%d일 | %s | 인원:%d명 | 이동:%s\n" +
+                   "기본 여행지(참고용):%s | 숙소:%s\n%s%s\n%d일차 JSON.",
+                   dayNum, totalDays, date,
+                   travel.getMemberCount() != null ? travel.getMemberCount() : 2,
+                   transport,
+                   travel.getEndLocation(),
+                   accommodationHint.isEmpty() ? "미정" : accommodationHint,
+                   nightviewNote,
+                   startConstraint,
+                   dayNum);
+        } else {
+            // ── userWish 없을 때: 기존 방식 ──────────────────────────────────
+            return String.format(
+                   "여행지:%s | %d일차/%d일 | %s | 인원:%d명 | %s | 테마:%s | 키워드:%s\n" +
+                   "숙소:%s | %s\n%s%s\n%d일차 JSON.",
+                   travel.getEndLocation(), dayNum, totalDays, date,
+                   travel.getMemberCount() != null ? travel.getMemberCount() : 2,
+                   transport,
+                   travel.getTheme() != null ? travel.getTheme() : "일반관광",
+                   travel.getKeywords() != null && !travel.getKeywords().isEmpty()
+                           ? travel.getKeywords() : "없음",
+                   accommodationHint.isEmpty() ? "미정" : accommodationHint,
+                   flightHint,
+                   nightviewNote,
+                   startConstraint,
+                   dayNum);
+        }
     }
 
     /** 이미 생성된 이전 Day들에 야경·전망대 장소가 있는지 확인 */

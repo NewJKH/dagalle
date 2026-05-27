@@ -224,9 +224,12 @@ export default function TravelPlannerPage() {
   }
 
   // ── Day 생성 ──────────────────────────────────────
+  const [aiErrorMsg, setAiErrorMsg] = useState<string | null>(null)
+
   const generateDay = useCallback(async (dayNum: number, wish?: string) => {
     setDayStatus(s => ({ ...s, [dayNum]: 'generating' }))
     setSelectedDay(dayNum)
+    setAiErrorMsg(null)
     try {
       const body = wish?.trim() ? JSON.stringify({ userWish: wish.trim() }) : undefined
       const res = await authFetch(`/api/v1/travels/${id}/ai/day/${dayNum}`, {
@@ -248,9 +251,16 @@ export default function TravelPlannerPage() {
           .then(r => r.json()).then(d => { if (d.data) setCostSummary(d.data) })
       } else {
         setDayStatus(s => ({ ...s, [dayNum]: 'error' }))
+        // AI 크레딧 소진 여부 구분
+        if (data?.code === 'AI_CREDIT_EXHAUSTED') {
+          setAiErrorMsg('AI 크레딧이 소진되었습니다. 관리자에게 문의하거나 잠시 후 다시 시도해주세요.')
+        } else {
+          setAiErrorMsg(data?.message ?? 'AI 일정 생성에 실패했습니다.')
+        }
       }
     } catch {
       setDayStatus(s => ({ ...s, [dayNum]: 'error' }))
+      setAiErrorMsg('네트워크 오류가 발생했습니다.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, authFetch])
@@ -661,14 +671,23 @@ export default function TravelPlannerPage() {
             )}
             {dayStatus[selectedDay] === 'generating' && <DayGeneratingCard dayNum={selectedDay} />}
             {dayStatus[selectedDay] === 'error' && (
-              <DayPendingCard
-                dayNum={selectedDay}
-                prevDone={selectedDay === 1 || dayStatus[selectedDay - 1] === 'done'}
-                wish={dayPrompts[selectedDay] ?? ''}
-                onWishChange={v => setDayPrompts(p => ({ ...p, [selectedDay]: v }))}
-                onGenerate={wish => generateDay(selectedDay, wish)}
-                isError
-              />
+              <>
+                {aiErrorMsg && (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12,
+                    padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                    <span style={{ color: '#B91C1C', fontSize: '0.9rem', fontWeight: 600 }}>{aiErrorMsg}</span>
+                  </div>
+                )}
+                <DayPendingCard
+                  dayNum={selectedDay}
+                  prevDone={selectedDay === 1 || dayStatus[selectedDay - 1] === 'done'}
+                  wish={dayPrompts[selectedDay] ?? ''}
+                  onWishChange={v => setDayPrompts(p => ({ ...p, [selectedDay]: v }))}
+                  onGenerate={wish => generateDay(selectedDay, wish)}
+                  isError
+                />
+              </>
             )}
 
             {/* Day 완성 — 타임라인 */}

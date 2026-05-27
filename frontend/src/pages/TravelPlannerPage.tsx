@@ -109,14 +109,15 @@ export default function TravelPlannerPage() {
   useWebSocket({
     travelId: travelIdNum,
     onScheduleUpdate: (data: any) => {
-      // type: DAY_UPDATED → 해당 day를 state에 반영
       if (data?.type === 'DAY_UPDATED' && data?.day) {
         const updatedDay: Day = data.day
         setDays(prev => {
           const filtered = prev.filter(d => d.dayNumber !== updatedDay.dayNumber)
           return [...filtered, updatedDay].sort((a, b) => a.dayNumber - b.dayNumber)
         })
-        setDayStatus(s => ({ ...s, [updatedDay.dayNumber]: 'done' }))
+        // routes가 있을 때만 done, 없으면 pending
+        const newStatus: DayStatus = updatedDay.routes?.length > 0 ? 'done' : 'pending'
+        setDayStatus(s => ({ ...s, [updatedDay.dayNumber]: newStatus }))
       }
     },
     onMemberUpdate: (_data: any) => {
@@ -159,16 +160,17 @@ export default function TravelPlannerPage() {
       const loadedDays: Day[] = dRes?.data ?? []
       setDays(loadedDays)
 
-      // 이미 생성된 Day 상태를 done으로 표시
+      // routes가 1개 이상인 Day만 done, 스켈레톤(0개)은 pending
       const status: Record<number, DayStatus> = {}
       const total = tRes?.data?.totalDays ?? 1
       for (let d = 1; d <= total; d++) {
-        status[d] = loadedDays.find(ld => ld.dayNumber === d) ? 'done' : 'pending'
+        const found = loadedDays.find(ld => ld.dayNumber === d)
+        status[d] = (found && found.routes.length > 0) ? 'done' : 'pending'
       }
       setDayStatus(status)
 
-      // 생성된 Day 중 첫 번째 선택
-      const firstDone = loadedDays[0]?.dayNumber ?? 1
+      // routes가 있는 첫 번째 Day 선택, 없으면 1일차
+      const firstDone = loadedDays.find(ld => ld.routes.length > 0)?.dayNumber ?? 1
       setSelectedDay(firstDone)
 
       if (rRes?.data) setCarRental(rRes.data)

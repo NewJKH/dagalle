@@ -4,10 +4,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.jkh.com.dagalle.common.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -30,6 +34,34 @@ public class GlobalExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
         return ResponseEntity.badRequest().body(ApiResponse.fail(message));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.fail("필수 파라미터가 누락되었습니다: " + e.getParameterName()));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.fail("지원하지 않는 HTTP 메서드입니다: " + e.getMethod()));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.fail("요청한 리소스를 찾을 수 없습니다."));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException e) {
+        String msg = "요청 형식이 올바르지 않습니다. (잘못된 값 또는 타입)";
+        Throwable cause = e.getCause();
+        if (cause != null && cause.getMessage() != null && cause.getMessage().contains("not one of the values accepted")) {
+            msg = "허용되지 않는 값입니다: " + cause.getMessage().replaceAll(".*\\[([^]]+)].*", "[$1]");
+        }
+        return ResponseEntity.badRequest().body(ApiResponse.fail(msg));
     }
 
     @ExceptionHandler(IllegalStateException.class)

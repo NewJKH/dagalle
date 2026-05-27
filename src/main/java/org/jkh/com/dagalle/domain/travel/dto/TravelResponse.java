@@ -21,7 +21,7 @@ public class TravelResponse {
     private LocalDate endDate;
     private TravelStatus status;
     @JsonProperty("isAiGenerated")
-    private boolean isAiGenerated;
+    private boolean aiGenerated;
     private String countryCode;
     private Integer memberCount;
     private Integer budgetTotal;
@@ -42,7 +42,7 @@ public class TravelResponse {
                 .startDate(plan.getStartDate())
                 .endDate(plan.getEndDate())
                 .status(plan.getStatus())
-                .isAiGenerated(plan.isAiGenerated())
+                .aiGenerated(plan.isAiGenerated())
                 .countryCode(plan.getCountryCode())
                 .memberCount(plan.getMemberCount())
                 .budgetTotal(plan.getBudgetTotal())

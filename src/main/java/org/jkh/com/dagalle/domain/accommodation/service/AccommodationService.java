@@ -52,6 +52,18 @@ public class AccommodationService {
     }
 
     @Transactional
+    public AccommodationResponse update(Long userId, Long travelId, Long accommodationId, AccommodationRequest request) {
+        TravelPlan travel = getAccessibleTravel(userId, travelId);
+        Accommodation accommodation = accommodationRepository.findById(accommodationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOMMODATION_NOT_FOUND));
+        if (!accommodation.getTravelPlan().getId().equals(travel.getId())) {
+            throw new BusinessException(ErrorCode.TRAVEL_ACCESS_DENIED);
+        }
+        accommodation.update(request.getHotelName(), request.getCheckIn(), request.getCheckOut(), request.getPricePerNightKrw());
+        return AccommodationResponse.from(accommodation);
+    }
+
+    @Transactional
     public void delete(Long userId, Long travelId, Long accommodationId) {
         TravelPlan travel = getAccessibleTravel(userId, travelId);
         Accommodation accommodation = accommodationRepository.findById(accommodationId)

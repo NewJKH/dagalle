@@ -14,4 +14,5 @@ public interface TravelMemberRepository extends JpaRepository<TravelMember, Long
     Optional<TravelMember> findByTravelPlanAndUser(TravelPlan travelPlan, User user);
     List<TravelMember> findByTravelPlan(TravelPlan travelPlan);
     boolean existsByTravelPlanAndUserAndRole(TravelPlan travelPlan, User user, MemberRole role);
+    void deleteByTravelPlan(TravelPlan travelPlan);
 }

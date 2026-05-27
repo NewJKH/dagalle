@@ -3,6 +3,7 @@ package org.jkh.com.dagalle.domain.travel.service;
 import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
+import org.jkh.com.dagalle.domain.accommodation.repository.AccommodationRepository;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.entity.LocationSource;
 import org.jkh.com.dagalle.domain.location.entity.LocationType;
@@ -12,6 +13,7 @@ import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
 import org.jkh.com.dagalle.domain.plan.entity.TransportType;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
 import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
+import org.jkh.com.dagalle.domain.rental.repository.CarRentalRepository;
 import org.jkh.com.dagalle.domain.travel.dto.InviteRequest;
 import org.jkh.com.dagalle.domain.travel.dto.SampleImportRequest;
 import org.jkh.com.dagalle.domain.travel.dto.TravelCreateRequest;
@@ -43,6 +45,8 @@ public class TravelPlanService {
     private final TravelMemberRepository travelMemberRepository;
     private final PlanDayRepository planDayRepository;
     private final PlanRouteRepository planRouteRepository;
+    private final AccommodationRepository accommodationRepository;
+    private final CarRentalRepository carRentalRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
 
@@ -147,6 +151,12 @@ public class TravelPlanService {
     @Transactional
     public void delete(Long userId, Long travelId) {
         TravelPlan travel = getOwnerTravel(userId, travelId);
+        // FK 제약 위반 방지: 자식 엔티티 순서대로 삭제
+        planRouteRepository.deleteByTravelPlanId(travelId);   // plan_routes (planDay → travelPlan)
+        planDayRepository.deleteByTravelPlanId(travelId);     // plan_days
+        accommodationRepository.deleteByTravelPlan(travel);   // accommodations
+        carRentalRepository.deleteByTravelPlan(travel);       // car_rentals
+        travelMemberRepository.deleteByTravelPlan(travel);    // travel_members
         travelPlanRepository.delete(travel);
     }
 

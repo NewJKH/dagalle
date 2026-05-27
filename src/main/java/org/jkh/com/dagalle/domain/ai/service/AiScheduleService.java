@@ -397,6 +397,17 @@ public class AiScheduleService {
         saveAccommodationPerNight(travel, req.getCountryCode(), req.getAccommodationScore(),
                 req.getStartDate(), req.getEndDate(), req.getEndLocation());
 
+        // PlanDay 스켈레톤: 빈 Day 레코드를 미리 생성 (route 없이)
+        // → GET /travels/{id}/days 에서 모든 날짜가 반환되도록 보장
+        java.util.List<PlanDay> emptyDays = new java.util.ArrayList<>();
+        LocalDate cur = req.getStartDate();
+        int dn = 1;
+        while (!cur.isAfter(req.getEndDate())) {
+            emptyDays.add(PlanDay.builder().travelPlan(travel).dayNumber(dn++).date(cur).build());
+            cur = cur.plusDays(1);
+        }
+        planDayRepository.saveAll(emptyDays);
+
         log.info("[규칙] TravelPlan 생성 완료: title={}, travelId={}", title, travel.getId());
         return travel;
     }

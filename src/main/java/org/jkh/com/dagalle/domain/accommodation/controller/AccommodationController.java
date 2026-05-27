@@ -44,6 +44,16 @@ public class AccommodationController {
         return ApiResponse.ok(accommodationService.list(principal.getId(), travelId));
     }
 
+    @Operation(summary = "숙박 수정", description = "숙박 정보를 수정합니다.")
+    @PatchMapping("/{accommodationId}")
+    public ApiResponse<AccommodationResponse> update(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "여행 ID") @PathVariable Long travelId,
+            @Parameter(description = "숙박 ID") @PathVariable Long accommodationId,
+            @RequestBody AccommodationRequest request) {
+        return ApiResponse.ok(accommodationService.update(principal.getId(), travelId, accommodationId, request));
+    }
+
     @Operation(summary = "숙박 삭제", description = "숙박 정보를 삭제합니다.")
     @DeleteMapping("/{accommodationId}")
     public ApiResponse<Void> delete(

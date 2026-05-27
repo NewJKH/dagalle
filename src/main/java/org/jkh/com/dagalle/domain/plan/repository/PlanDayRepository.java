@@ -3,6 +3,7 @@ package org.jkh.com.dagalle.domain.plan.repository;
 import org.jkh.com.dagalle.domain.plan.entity.PlanDay;
 import org.jkh.com.dagalle.domain.travel.entity.TravelPlan;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
@@ -32,4 +33,8 @@ public interface PlanDayRepository extends JpaRepository<PlanDay, Long> {
             WHERE d.travelPlan = :travelPlan AND d.dayNumber = :dayNumber
             """)
     Optional<PlanDay> findByTravelPlanAndDayNumber(TravelPlan travelPlan, Integer dayNumber);
+
+    @Modifying
+    @Query("DELETE FROM PlanDay d WHERE d.travelPlan.id = :travelId")
+    void deleteByTravelPlanId(Long travelId);
 }

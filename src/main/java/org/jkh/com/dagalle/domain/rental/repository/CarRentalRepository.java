@@ -10,4 +10,5 @@ import java.util.Optional;
 public interface CarRentalRepository extends JpaRepository<CarRental, Long> {
     List<CarRental> findByTravelPlan(TravelPlan travelPlan);
     Optional<CarRental> findByIdAndTravelPlan(Long id, TravelPlan travelPlan);
+    void deleteByTravelPlan(TravelPlan travelPlan);
 }

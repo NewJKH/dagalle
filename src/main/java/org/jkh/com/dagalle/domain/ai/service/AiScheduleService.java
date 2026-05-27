@@ -1267,6 +1267,13 @@ public class AiScheduleService {
             }
         } catch (Exception e) {
             log.warn("[Places 실패] '{}' - AI 좌표 사용. {}", name, e.getMessage());
+            // Google 호출 실패 시 타입별 평균 비용 적용
+            placeCost = defaultCostByType(type);
+        }
+
+        // Google 결과가 있었지만 priceLevel만 없을 때도 평균값으로 보정
+        if (placeCost == 0) {
+            placeCost = defaultCostByType(type);
         }
 
         final String finalName = name;
@@ -1282,16 +1289,24 @@ public class AiScheduleService {
      * Google Places priceLevel → 1인 예상 KRW 비용.
      * 교통비(estimatedCost)와는 별개로 해당 장소에서 소비하는 금액.
      */
+    /**
+     * 타입별 평균 소비 비용 (Google priceLevel 없을 때 fallback).
+     * RESTAURANT·CAFE·SHOPPING 등 소비성 장소에는 평균값을 적용한다.
+     */
+    private int defaultCostByType(LocationType type) {
+        return switch (type) {
+            case RESTAURANT -> 15_000;   // 한끼 평균 (편의점~고급 중간값)
+            case CAFE       ->  6_500;   // 음료+디저트 평균
+            case SHOPPING   -> 30_000;   // 기념품·쇼핑 평균
+            case MUSEUM     -> 12_000;   // 입장료 평균
+            default         ->  0;       // 공원·역·공항·호텔 = 무료 or 별도 계산
+        };
+    }
+
     private int priceLevelToKrw(LocationType type, String priceLevel) {
         if (priceLevel == null) {
-            // priceLevel 없는 장소: 타입별 기본값 (공원·역 등은 0)
-            return switch (type) {
-                case MUSEUM   -> 12_000;   // 일반 박물관 입장료 평균
-                case PARK     -> 0;
-                case STATION, AIRPORT -> 0;
-                case HOTEL    -> 0;        // 숙박은 accommodation 따로 계산
-                default       -> 0;
-            };
+            // priceLevel 없는 장소: 타입별 평균값 사용
+            return defaultCostByType(type);
         }
         return switch (priceLevel) {
             case "PRICE_LEVEL_FREE"        -> 0;

@@ -20,6 +20,7 @@ import org.jkh.com.dagalle.domain.plan.dto.PlanDayResponse;
 import org.jkh.com.dagalle.domain.plan.entity.PlanDay;
 import org.jkh.com.dagalle.domain.plan.entity.PlanRoute;
 import org.jkh.com.dagalle.domain.plan.entity.TransportType;
+import org.jkh.com.dagalle.domain.plan.fare.TransitFareRegistry;
 import org.jkh.com.dagalle.domain.plan.repository.PlanDayRepository;
 import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
 import org.jkh.com.dagalle.domain.rental.entity.CarRental;
@@ -79,6 +80,7 @@ public class AiScheduleService {
     private final AccommodationRepository accommodationRepository;
     private final ObjectMapper objectMapper;
     private final GooglePlacesClient googlePlacesClient;
+    private final TransitFareRegistry transitFareRegistry;
 
     // ──────────────────────────────────────────────
     //  Day 전체 스키마 (단일 Claude 호출용)
@@ -1203,16 +1205,37 @@ public class AiScheduleService {
             LocationWithCost toLc   = resolveLocation(routeNode.path("toLocation"),   date);
             String note = routeNode.path("note").isMissingNode() ? null : routeNode.path("note").asText(null);
 
-            // 교통비: AI 추정값 (estimatedCost)
+            // 교통수단 파싱
+            TransportType transport = parseTransport(routeNode.path("transport").asText("WALK"));
+
+            // 교통비 계산
+            // - WALK : 무조건 0원 (도보는 무료)
+            // - SUBWAY/BUS/TRAIN : TransitFareRegistry 계산값 우선 (AI 추정값 무시)
+            // - CAR/ETC : AI 추정값 사용
+            int transportCost;
+            if (transport == TransportType.WALK) {
+                transportCost = 0;
+            } else if (transport == TransportType.SUBWAY
+                    || transport == TransportType.BUS
+                    || transport == TransportType.TRAIN) {
+                double lat1 = fromLc.location().getLat(), lng1 = fromLc.location().getLng();
+                double lat2 = toLc.location().getLat(),   lng2 = toLc.location().getLng();
+                double distKm = haversineKm(lat1, lng1, lat2, lng2);
+                transportCost = transitFareRegistry
+                        .calculate(travel.getCountryCode(), transport, distKm)
+                        .orElse(routeNode.path("estimatedCost").asInt(0));
+            } else {
+                transportCost = routeNode.path("estimatedCost").asInt(0);
+            }
+
             // 장소비용: Google priceLevel 기반 (placeCost) — 0이면 Google 데이터 없음
-            int transportCost = routeNode.path("estimatedCost").asInt(0);
-            int placeCost     = toLc.placeCost();   // toLocation 소비 비용
+            int placeCost = toLc.placeCost();
 
             planRouteRepository.save(PlanRoute.builder()
                     .planDay(planDay)
                     .sequence(seq++)
                     .fromLocation(fromLc.location()).toLocation(toLc.location())
-                    .transport(parseTransport(routeNode.path("transport").asText("WALK")))
+                    .transport(transport)
                     .departureTime(parseDepartureTime(date, routeNode.path("departureTime").asText("09:00")))
                     .durationMinutes(routeNode.path("durationMinutes").asInt(30))
                     .estimatedCost(transportCost)
@@ -1519,6 +1542,16 @@ public class AiScheduleService {
 
     private long daysBetween(LocalDate start, LocalDate end) {
         return java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
+    }
+
+    private double haversineKm(double lat1, double lng1, double lat2, double lng2) {
+        double R = 6371;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     // ── TODO: 하드코딩 fallback 일정 (나중에 제거) ──────────────────────

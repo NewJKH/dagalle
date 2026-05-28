@@ -56,7 +56,7 @@ external-api:
     routes-url: https://routes.googleapis.com
   claude:
     key: ${CLAUDE_API_KEY:}
-    model: claude-opus-4-7
+    model: claude-sonnet-4-5
 
 ---
 spring:

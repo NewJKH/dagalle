@@ -73,75 +73,74 @@ export default function ProfilePage() {
   )
 
   return (
-    <div style={{ minHeight: '100vh', background: '#FAFAFA' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--gray7)' }}>
       <Navbar />
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '96px 32px 64px' }}>
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: '96px 32px 64px' }}>
 
         {/* 헤더 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 36 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 32 }}>
           <div style={{
-            width: 72, height: 72, borderRadius: '50%',
+            width: 68, height: 68, borderRadius: '50%',
             background: 'var(--primary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '2rem', flexShrink: 0,
+            fontSize: '1.6rem', fontWeight: 900, color: '#fff', flexShrink: 0, letterSpacing: '-0.02em',
           }}>
             {user?.username?.charAt(0).toUpperCase() ?? '?'}
           </div>
           <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 900, color: '#1A1A1A', marginBottom: 4 }}>{user?.username}</h1>
-            <p style={{ fontSize: '0.85rem', color: '#999' }}>{user?.email}</p>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.02em', marginBottom: 4 }}>{user?.username}</h1>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text3)' }}>{user?.email}</p>
           </div>
         </div>
 
         {/* 정보 카드 */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #EBEBEB', padding: '28px', marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#1A1A1A', marginBottom: 20 }}>프로필 수정</h2>
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid var(--border-lt)', padding: '28px', marginBottom: 14, boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+          <h2 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: 20, letterSpacing: '-0.01em' }}>프로필 수정</h2>
 
           {/* 닉네임 */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666', display: 'block', marginBottom: 8 }}>닉네임</label>
-            <input
-              value={editUsername}
-              onChange={e => setEditUsername(e.target.value)}
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 7 }}>닉네임</label>
+            <input value={editUsername} onChange={e => setEditUsername(e.target.value)}
               style={{
-                width: '100%', boxSizing: 'border-box', padding: '12px 16px',
-                borderRadius: 10, border: '1.5px solid #EBEBEB', fontSize: '0.9rem',
-                outline: 'none', fontFamily: 'inherit', background: '#FAFAFA',
-                transition: 'border-color 0.15s',
+                width: '100%', boxSizing: 'border-box', padding: '11px 14px',
+                borderRadius: 10, border: '1.5px solid var(--border)', fontSize: '0.9rem',
+                outline: 'none', fontFamily: 'inherit', background: '#fff', color: 'var(--text)',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
               }}
-              onFocus={e => { (e.currentTarget as HTMLInputElement).style.borderColor = '#0EA5E9' }}
-              onBlur={e => { (e.currentTarget as HTMLInputElement).style.borderColor = '#EBEBEB' }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-pale)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none' }}
             />
           </div>
 
-          {/* 이메일 (읽기 전용) */}
+          {/* 이메일 */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666', display: 'block', marginBottom: 8 }}>이메일 <span style={{ color: '#BBB', fontWeight: 400 }}>(변경 불가)</span></label>
-            <div style={{ padding: '12px 16px', borderRadius: 10, border: '1.5px solid #F0F0F0', fontSize: '0.9rem', color: '#888', background: '#F8F8F8' }}>
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 7 }}>이메일 <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(변경 불가)</span></label>
+            <div style={{ padding: '11px 14px', borderRadius: 10, border: '1px solid var(--border-lt)', fontSize: '0.9rem', color: 'var(--text3)', background: 'var(--gray7)' }}>
               {user?.email}
             </div>
           </div>
 
           {/* 여행 성향 */}
           <div style={{ marginBottom: 24 }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666', display: 'block', marginBottom: 10 }}>여행 성향</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 10 }}>여행 성향</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {TENDENCY_OPTS.map(opt => {
                 const isSel = editTendency === opt.key
                 return (
                   <div key={opt.key} onClick={() => setEditTendency(opt.key)} style={{
                     padding: '12px 16px', borderRadius: 12, cursor: 'pointer',
-                    border: `2px solid ${isSel ? '#0EA5E9' : '#EBEBEB'}`,
-                    background: isSel ? '#EFF6FF' : '#fff',
+                    border: `1.5px solid ${isSel ? 'var(--primary)' : 'var(--border)'}`,
+                    background: isSel ? 'var(--primary-bg)' : '#fff',
                     display: 'flex', alignItems: 'center', gap: 12,
                     transition: 'all 0.15s',
+                    boxShadow: isSel ? '0 0 0 3px var(--primary-pale)' : 'none',
                   }}>
                     <span style={{ fontSize: '1.1rem' }}>{opt.label.split(' ')[0]}</span>
                     <div>
-                      <div style={{ fontSize: '0.87rem', fontWeight: 700, color: isSel ? '#0284C7' : '#333' }}>{opt.label.split(' ').slice(1).join(' ')}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 1 }}>{opt.desc}</div>
+                      <div style={{ fontSize: '0.87rem', fontWeight: 700, color: isSel ? 'var(--primary-dk)' : 'var(--text)' }}>{opt.label.split(' ').slice(1).join(' ')}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text3)', marginTop: 1 }}>{opt.desc}</div>
                     </div>
-                    {isSel && <span style={{ marginLeft: 'auto', color: '#0EA5E9', fontWeight: 700, fontSize: '0.9rem' }}>✓</span>}
+                    {isSel && <span style={{ marginLeft: 'auto', color: 'var(--primary)', fontWeight: 800, fontSize: '0.95rem' }}>✓</span>}
                   </div>
                 )
               })}
@@ -149,28 +148,28 @@ export default function ProfilePage() {
           </div>
 
           <button onClick={handleSave} disabled={saving} style={{
-            width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-            background: saved ? '#00B894' : 'var(--primary)', color: '#fff',
-            fontSize: '0.95rem', fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer',
-            opacity: saving ? 0.7 : 1, transition: 'all 0.2s',
+            width: '100%', padding: '13px', borderRadius: 10, border: 'none',
+            background: saved ? '#16A34A' : 'var(--primary)', color: '#fff',
+            fontSize: '0.95rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.7 : 1, transition: 'all 0.2s', fontFamily: 'inherit',
           }}>
             {saving ? '저장 중...' : saved ? '✅ 저장됐어요!' : '저장하기'}
           </button>
         </div>
 
         {/* 내 여행 / 로그아웃 */}
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => navigate('/travels')} style={{
-            flex: 1, padding: '13px', borderRadius: 12, border: '1.5px solid #E0E0E0',
-            background: '#fff', fontSize: '0.9rem', fontWeight: 700, color: '#444', cursor: 'pointer',
+            flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--border)',
+            background: '#fff', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit',
           }}>
             ✈️ 내 여행 목록
           </button>
           <button onClick={handleLogout} style={{
-            flex: 1, padding: '13px', borderRadius: 12, border: '1.5px solid #FFD7D3',
-            background: '#FFF5F4', fontSize: '0.9rem', fontWeight: 700, color: '#FF5640', cursor: 'pointer',
+            flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--coral-lt)',
+            background: 'var(--coral-bg)', fontSize: '0.88rem', fontWeight: 600, color: 'var(--coral)', cursor: 'pointer', fontFamily: 'inherit',
           }}>
-            🚪 로그아웃
+            로그아웃
           </button>
         </div>
       </div>

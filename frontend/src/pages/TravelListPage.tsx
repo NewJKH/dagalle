@@ -101,35 +101,35 @@ export default function TravelListPage() {
   const completed = plans.filter(p => p.status === 'COMPLETED').length
 
   return (
-    <div style={{ minHeight: '100vh', background: '#FAFAFA' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--gray7)' }}>
       <Navbar />
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '88px 32px 64px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1A1A1A', letterSpacing: '-0.02em' }}>내 여행 목록</h1>
-            <p style={{ fontSize: '0.82rem', color: '#999', marginTop: 4 }}>나만의 맞춤 여행 일정</p>
+            <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.03em' }}>내 여행 목록</h1>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text3)', marginTop: 4 }}>나만의 맞춤 여행 일정</p>
           </div>
           <button onClick={() => setShowCreate(true)} style={{
             display: 'flex', alignItems: 'center', gap: 7,
-            padding: '11px 22px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 800,
+            padding: '11px 22px', borderRadius: 9, fontSize: '0.875rem', fontWeight: 700,
             background: 'var(--primary)', color: '#fff', border: 'none',
-            boxShadow: '0 2px 10px rgba(255,86,64,0.3)', cursor: 'pointer', transition: 'all 0.15s',
+            cursor: 'pointer', transition: 'background 0.15s', fontFamily: 'inherit',
           }}
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary-dk)' }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary)' }}
           >+ 새 여행 만들기</button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 20, background: '#fff', borderRadius: 10, padding: 4, border: '1px solid #F0F0F0', width: 'fit-content' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 20, background: '#fff', borderRadius: 10, padding: 4, border: '1px solid var(--border-lt)', width: 'fit-content' }}>
           {([
             { key: 'all',       label: `전체 ${plans.length}` },
             { key: 'upcoming',  label: `예정 ${upcoming}` },
             { key: 'completed', label: `완료 ${completed}` },
           ] as const).map(({ key, label }) => (
             <button key={key} onClick={() => setFilter(key)} style={{
-              padding: '7px 18px', borderRadius: 8, fontSize: '0.82rem', fontWeight: 700, border: 'none', cursor: 'pointer',
+              padding: '7px 18px', borderRadius: 7, fontSize: '0.82rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               background: filter === key ? 'var(--primary)' : 'transparent',
-              color: filter === key ? '#fff' : '#888',
+              color: filter === key ? '#fff' : 'var(--text3)',
               transition: 'all 0.15s',
             }}>{label}</button>
           ))}
@@ -157,16 +157,16 @@ export default function TravelListPage() {
       )}
 
       {confirmDelete !== null && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setConfirmDelete(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 28px', width: 360, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 28px', width: 360, maxWidth: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.18)', border: '1px solid var(--border-lt)' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: '2.5rem', textAlign: 'center', marginBottom: 16 }}>🗑️</div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1A1A1A', textAlign: 'center', marginBottom: 8 }}>여행을 삭제할까요?</h3>
-            <p style={{ fontSize: '0.85rem', color: '#888', textAlign: 'center', marginBottom: 24 }}>삭제된 여행 계획은 복구할 수 없어요.</p>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)', textAlign: 'center', marginBottom: 8 }}>여행을 삭제할까요?</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text3)', textAlign: 'center', marginBottom: 24 }}>삭제된 여행 계획은 복구할 수 없어요.</p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1.5px solid #E0E0E0', background: '#fff', fontSize: '0.9rem', fontWeight: 700, color: '#666', cursor: 'pointer' }}>취소</button>
-              <button onClick={() => handleDelete(confirmDelete)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#FF5640', fontSize: '0.9rem', fontWeight: 800, color: '#fff', cursor: 'pointer' }}>삭제</button>
+              <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit' }}>취소</button>
+              <button onClick={() => handleDelete(confirmDelete)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--coral)', fontSize: '0.9rem', fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>삭제</button>
             </div>
           </div>
         </div>
@@ -202,7 +202,7 @@ function TravelCard({ plan, onClick, onDelete }: { plan: TravelPlan; onClick: ()
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#1A1A1A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{plan.title}</h3>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: st.bg, color: st.color, flexShrink: 0 }}>{st.label}</span>
-            {plan.isAiGenerated && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#FFF3F1', color: 'var(--primary)', flexShrink: 0 }}>큐레이션</span>}
+            {plan.isAiGenerated && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'var(--primary-bg)', color: 'var(--primary)', flexShrink: 0 }}>큐레이션</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#444' }}>{plan.startLocation} → {plan.endLocation}</span>
@@ -224,7 +224,7 @@ function TravelCard({ plan, onClick, onDelete }: { plan: TravelPlan; onClick: ()
             background: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '0.85rem', cursor: 'pointer', color: '#CCC', transition: 'all 0.15s',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#FF5640'; (e.currentTarget as HTMLButtonElement).style.color = '#FF5640'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF3F1' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--coral)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--coral)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--coral-bg)' }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#F0F0F0'; (e.currentTarget as HTMLButtonElement).style.color = '#CCC'; (e.currentTarget as HTMLButtonElement).style.background = '#FFF' }}
           >🗑️</button>
           <span style={{ color: '#CCC', fontSize: '1rem' }}>›</span>
@@ -236,11 +236,11 @@ function TravelCard({ plan, onClick, onDelete }: { plan: TravelPlan; onClick: ()
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div style={{ textAlign: 'center', padding: '80px 0', background: '#fff', borderRadius: 14, border: '1px solid #EBEBEB' }}>
-      <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>✈️</div>
-      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1A1A1A', marginBottom: 8 }}>아직 여행 계획이 없어요</h3>
-      <p style={{ color: '#999', fontSize: '0.85rem', marginBottom: 24 }}>지금 바로 첫 여행 일정을 만들어볼까요?</p>
-      <button onClick={onCreate} style={{ padding: '12px 28px', borderRadius: 10, fontSize: '0.9rem', fontWeight: 800, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 2px 10px rgba(255,86,64,0.3)' }}>
+    <div style={{ textAlign: 'center', padding: '80px 0', background: '#fff', borderRadius: 14, border: '1px solid var(--border-lt)' }}>
+      <div style={{ fontSize: '3rem', marginBottom: 16 }}>✈️</div>
+      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>아직 여행 계획이 없어요</h3>
+      <p style={{ color: 'var(--text3)', fontSize: '0.85rem', marginBottom: 24 }}>지금 바로 첫 여행 일정을 만들어볼까요?</p>
+      <button onClick={onCreate} style={{ padding: '12px 28px', borderRadius: 9, fontSize: '0.9rem', fontWeight: 700, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
         + 첫 여행 만들기
       </button>
     </div>
@@ -411,7 +411,7 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
   const pillSelected: React.CSSProperties = {
     ...pillBase,
     border: '2px solid var(--primary)',
-    background: '#FFF3F1',
+    background: 'var(--primary-bg)',
     color: 'var(--primary)',
   }
   const tileBase: React.CSSProperties = {
@@ -421,7 +421,7 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
   const tileSelected: React.CSSProperties = {
     ...tileBase,
     border: '2px solid var(--primary)',
-    background: '#FFF3F1',
+    background: 'var(--primary-bg)',
   }
 
   const progressPct = (step / TOTAL_STEPS) * 100
@@ -520,7 +520,7 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
                     style={{
                       flex: 1, padding: '12px', borderRadius: 12, cursor: 'pointer', fontWeight: 800, fontSize: '0.95rem',
                       border: wizard.countryCode === c.code ? '2px solid var(--primary)' : '1.5px solid #E0E0E0',
-                      background: wizard.countryCode === c.code ? '#FFF3F1' : '#FAFAFA',
+                      background: wizard.countryCode === c.code ? 'var(--primary-bg)' : '#FAFAFA',
                       color: wizard.countryCode === c.code ? 'var(--primary)' : '#666', transition: 'all 0.15s',
                     }}>{c.flag} {c.label}</button>
                 ))}
@@ -539,9 +539,9 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
                       style={{
                         padding: '12px 6px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
                         border: sel ? '2px solid var(--primary)' : '1.5px solid #EBEBEB',
-                        background: sel ? '#FFF3F1' : '#FAFAFA',
+                        background: sel ? 'var(--primary-bg)' : '#FAFAFA',
                         color: sel ? 'var(--primary)' : '#444', transition: 'all 0.15s',
-                        boxShadow: sel ? '0 2px 8px rgba(255,86,64,0.2)' : 'none',
+                        boxShadow: sel ? '0 2px 8px var(--primary-pale)' : 'none',
                       }}>{DEST_EMOJI[city] ?? '📍'} {city}</button>
                   )
                 })}
@@ -579,7 +579,7 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
               </div>
 
               {nights > 0 && (
-                <div style={{ background: '#FFF3F1', borderRadius: 10, padding: '12px 16px', marginBottom: 20, textAlign: 'center' }}>
+                <div style={{ background: 'var(--primary-bg)', borderRadius: 10, padding: '12px 16px', marginBottom: 20, textAlign: 'center' }}>
                   <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary)' }}>🗓️ {nights}박 {days}일</span>
                 </div>
               )}
@@ -829,7 +829,7 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
               </div>
 
               {error && (
-                <div style={{ background: '#FFF3F1', border: '1px solid #FFBDB5', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 500 }}>
+                <div style={{ background: 'var(--primary-bg)', border: '1px solid #FFBDB5', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 500 }}>
                   ⚠️ {error}
                 </div>
               )}
@@ -840,7 +840,7 @@ function CreateModal({ onClose, onCreated, preFill = {} }: {
                 style={{
                   width: '100%', padding: '16px', borderRadius: 12, fontSize: '1rem', fontWeight: 800,
                   background: loading ? '#E0E0E0' : 'var(--primary)', color: '#fff', border: 'none',
-                  boxShadow: loading ? 'none' : '0 4px 16px rgba(255,86,64,0.4)',
+                  boxShadow: loading ? 'none' : '0 4px 16px rgba(0,168,150,0.25)',
                   cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   marginBottom: 14,

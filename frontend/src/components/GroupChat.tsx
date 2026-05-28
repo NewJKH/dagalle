@@ -83,7 +83,7 @@ export default function GroupChat({ travelId, myUserId, newMessage, onClose }: P
     }}>
       {/* 헤더 */}
       <div style={{
-        background: `linear-gradient(135deg, ${sky}, #0284C7)`,
+        background: 'var(--primary)',
         padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>💬 그룹 채팅</span>
@@ -111,7 +111,7 @@ export default function GroupChat({ travelId, myUserId, newMessage, onClose }: P
               {!isMe && (
                 <div style={{
                   width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                  background: `linear-gradient(135deg, ${sky}40, ${coral}40)`,
+                  background: 'var(--gray6)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', fontWeight: 700, color: '#475569',
                 }}>
@@ -126,7 +126,7 @@ export default function GroupChat({ travelId, myUserId, newMessage, onClose }: P
                 )}
                 <div style={{
                   padding: '8px 12px', borderRadius: isMe ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-                  background: isMe ? `linear-gradient(135deg, ${sky}, #0284C7)` : '#f1f5f9',
+                  background: isMe ? 'var(--primary)' : 'var(--gray6)',
                   color: isMe ? '#fff' : '#1e293b',
                   fontSize: '0.85rem', lineHeight: 1.5,
                   boxShadow: isMe ? '0 2px 8px rgba(14,165,233,0.3)' : '0 1px 3px rgba(0,0,0,0.06)',
@@ -170,7 +170,7 @@ export default function GroupChat({ travelId, myUserId, newMessage, onClose }: P
         />
         <button onClick={send} disabled={!input.trim() || sending} style={{
           padding: '8px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
-          background: input.trim() ? `linear-gradient(135deg, ${sky}, #0284C7)` : '#e2e8f0',
+          background: input.trim() ? 'var(--primary)' : 'var(--gray5)',
           color: input.trim() ? '#fff' : '#94a3b8',
           fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.15s',
           flexShrink: 0,

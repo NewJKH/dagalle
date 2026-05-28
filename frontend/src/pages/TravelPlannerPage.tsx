@@ -317,17 +317,15 @@ export default function TravelPlannerPage() {
         <aside style={{ background: '#fff', borderRight: '1px solid var(--border-lt)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* 여행 헤더 */}
-          <div style={{ background: 'linear-gradient(135deg, #0284C7, #38BDF8)', padding: '20px 20px 24px' }}>
+          <div style={{ background: 'var(--primary)', padding: '18px 20px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <button onClick={() => navigate('/travels')} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, color: 'rgba(255,255,255,0.9)', fontSize: '0.78rem', cursor: 'pointer', padding: '5px 10px', fontFamily: 'inherit', fontWeight: 500 }}>← 목록으로</button>
-              {/* 상태 뱃지 */}
+              <button onClick={() => navigate('/travels')} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 6, color: '#fff', fontSize: '0.78rem', cursor: 'pointer', padding: '5px 10px', fontFamily: 'inherit', fontWeight: 500 }}>← 목록으로</button>
               {travel?.status && (
-                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: STATUS_BG[travel.status] ?? '#F5F5F5', color: STATUS_COLOR[travel.status] ?? '#888' }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: STATUS_BG[travel.status] ?? 'rgba(255,255,255,0.2)', color: STATUS_COLOR[travel.status] ?? '#fff' }}>
                   {STATUS_LABEL[travel.status] ?? travel.status}
                 </span>
               )}
             </div>
-            {/* 제목 (클릭하면 편집) */}
             {editingTitle ? (
               <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
                 <input
@@ -335,89 +333,71 @@ export default function TravelPlannerPage() {
                   value={titleDraft}
                   onChange={e => setTitleDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false) }}
-                  style={{ flex: 1, fontSize: '0.92rem', fontWeight: 700, borderRadius: 6, border: 'none', padding: '4px 8px', background: 'rgba(255,255,255,0.9)', color: '#1A1A1A', outline: 'none', fontFamily: 'inherit' }}
+                  style={{ flex: 1, fontSize: '0.92rem', fontWeight: 700, borderRadius: 6, border: 'none', padding: '4px 8px', background: 'rgba(255,255,255,0.92)', color: 'var(--black)', outline: 'none', fontFamily: 'inherit' }}
                 />
                 <button onClick={saveTitle} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 6, color: '#fff', padding: '4px 10px', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>저장</button>
               </div>
             ) : (
               <h2 onClick={() => { setTitleDraft(travel?.title ?? ''); setEditingTitle(true) }}
                 title="클릭하여 제목 편집"
-                style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', marginBottom: 4, cursor: 'text', display: 'flex', alignItems: 'center', gap: 6 }}>
+                style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', marginBottom: 6, cursor: 'text', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {travel?.title ?? '여행 플래너'}
-                <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>✏️</span>
+                <span style={{ fontSize: '0.6rem', opacity: 0.7 }}>✏️</span>
               </h2>
             )}
-            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <span>📍 {travel?.startLocation} → {travel?.endLocation}</span>
+            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.82)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span>{travel?.startLocation} → {travel?.endLocation}</span>
               <span>·</span>
               <span>{totalDays}일</span>
-              {travel?.withCar && <span>· 🚗 렌트카</span>}
+              {travel?.withCar && <span>· 렌트카</span>}
             </div>
-            {/* 항공편 시간 */}
             {(travel?.departureFlightTime || travel?.returnFlightTime) && (
-              <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+              <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
                 {travel?.departureFlightTime && (
-                  <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: '5px 10px', fontSize: '0.7rem', color: '#fff' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 6, padding: '4px 9px', fontSize: '0.68rem', color: '#fff' }}>
                     ✈️ 출발 {travel.departureFlightTime}
                   </div>
                 )}
                 {travel?.returnFlightTime && (
-                  <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: '5px 10px', fontSize: '0.7rem', color: '#fff' }}>
-                    🔙 귀국 {travel.returnFlightTime}
+                  <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 6, padding: '4px 9px', fontSize: '0.68rem', color: '#fff' }}>
+                    ↩️ 귀국 {travel.returnFlightTime}
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* ── 요약 패널 (상단) ── */}
-          <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border-lt)', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', maxHeight: 300, overflowY: 'auto' }}>
+          {/* ── 요약 패널 ── */}
+          <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border-lt)', background: 'var(--gray7)', display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', maxHeight: 300, overflowY: 'auto' }}>
 
             {allDone && (
-              <div style={{ padding: '8px 10px', background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 10, border: '1px solid #A7F3D0' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#059669', marginBottom: 2 }}>✅ 전체 일정 완성!</div>
-                <div style={{ fontSize: '0.67rem', color: '#6B7280' }}>마음에 안 드는 Day는 🔄로 재생성 가능해요.</div>
+              <div style={{ padding: '8px 10px', background: 'var(--primary-bg)', borderRadius: 8, border: '1px solid var(--primary-pale)' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary-dk)', marginBottom: 2 }}>✅ 전체 일정 완성!</div>
+                <div style={{ fontSize: '0.67rem', color: 'var(--text3)' }}>마음에 안 드는 Day는 🔄로 재생성 가능해요.</div>
               </div>
             )}
 
-            <div style={{ background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', borderRadius: 12, padding: '10px 12px', border: '1px solid #BFDBFE' }}>
-              {/* 1인 / 팀 경비 토글 탭 */}
+            <div style={{ background: '#fff', borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
               {costSummary ? (
                 <>
-                  {/* 1인 경비 */}
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--sky-dk)', fontWeight: 600, marginBottom: 2 }}>
-                      👤 1인 예상 경비
+                    <div style={{ fontSize: '0.63rem', color: 'var(--text3)', fontWeight: 500, marginBottom: 2 }}>👤 1인 예상 경비</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>
+                      {costSummary.perPersonKrw.toLocaleString()}<span style={{ fontSize: '0.68rem', fontWeight: 600, marginLeft: 2 }}>원</span>
                     </div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--sky-dk)', lineHeight: 1 }}>
-                      {costSummary.perPersonKrw.toLocaleString()}<span style={{ fontSize: '0.7rem', fontWeight: 600, marginLeft: 2 }}>원</span>
-                    </div>
-                    <div style={{ fontSize: '0.63rem', color: '#64748B', marginTop: 2 }}>
-                      ✈️ 항공 {costSummary.flightPerPersonKrw.toLocaleString()}원 포함
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text3)', marginTop: 2 }}>
+                      항공 {costSummary.flightPerPersonKrw.toLocaleString()}원 포함
                     </div>
                   </div>
-
-                  {/* 구분선 */}
-                  <div style={{ borderTop: '1px dashed #BFDBFE', margin: '6px 0' }} />
-
-                  {/* 팀 경비 */}
+                  <div style={{ borderTop: '1px solid var(--border-lt)', margin: '6px 0' }} />
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: '0.65rem', color: '#7C3AED', fontWeight: 600, marginBottom: 2 }}>
-                      👥 팀 전체 ({costSummary.memberCount}명)
-                    </div>
-                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#7C3AED' }}>
-                      {costSummary.teamTotalKrw.toLocaleString()}<span style={{ fontSize: '0.7rem', fontWeight: 600, marginLeft: 2 }}>원</span>
-                    </div>
-                    <div style={{ fontSize: '0.63rem', color: '#64748B', marginTop: 1 }}>
-                      1인 {costSummary.perPersonKrw.toLocaleString()}원 × {costSummary.memberCount}명
+                    <div style={{ fontSize: '0.63rem', color: 'var(--text3)', fontWeight: 500, marginBottom: 2 }}>👥 팀 전체 ({costSummary.memberCount}명)</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
+                      {costSummary.teamTotalKrw.toLocaleString()}<span style={{ fontSize: '0.68rem', fontWeight: 500, marginLeft: 2 }}>원</span>
                     </div>
                   </div>
-
-                  {/* 구분선 */}
-                  <div style={{ borderTop: '1px solid #BFDBFE', margin: '6px 0' }} />
-
-                  {/* 항목별 breakdown */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ borderTop: '1px solid var(--border-lt)', margin: '6px 0' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {([
                       ['✈️ 항공', costSummary.breakdown.flight],
                       ['🚌 교통', costSummary.breakdown.transport],
@@ -428,54 +408,50 @@ export default function TravelPlannerPage() {
                     ] as [string, number][])
                       .filter(([, v]) => v > 0)
                       .map(([label, val]) => (
-                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem' }}>
+                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.66rem' }}>
                           <span style={{ color: 'var(--text3)' }}>{label}</span>
-                          <span style={{ fontWeight: 600, color: 'var(--sky-dk)' }}>{val.toLocaleString()}원</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text2)' }}>{val.toLocaleString()}원</span>
                         </div>
                       ))}
                   </div>
                 </>
               ) : (
-                /* costSummary 없을 때 간단 표시 */
                 <>
-                  <div style={{ fontSize: '0.67rem', color: 'var(--sky-dk)', fontWeight: 600, marginBottom: 4 }}>예상 총 비용</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--sky-dk)' }}>
-                    {totalCost.toLocaleString()}<span style={{ fontSize: '0.72rem', marginLeft: 2 }}>원</span>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text3)', fontWeight: 500, marginBottom: 4 }}>예상 총 비용</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary)' }}>
+                    {totalCost.toLocaleString()}<span style={{ fontSize: '0.7rem', marginLeft: 2 }}>원</span>
                   </div>
                 </>
               )}
             </div>
 
             {carRental && (
-              <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', borderRadius: 10, padding: '10px 12px', border: '1px solid #A7F3D0' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#059669', marginBottom: 6 }}>🚗 렌트카 추천</div>
-                {/* 차종 이름 */}
-                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#064E3B', marginBottom: 4, wordBreak: 'keep-all' }}>
+              <div style={{ background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.63rem', fontWeight: 600, color: 'var(--text3)', marginBottom: 6 }}>🚗 렌트카</div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', marginBottom: 4, wordBreak: 'keep-all' }}>
                   {carRental.carType}
                 </div>
-                {/* 요금 세부 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.63rem' }}>
-                    <span style={{ color: '#6B7280' }}>렌탈료</span>
-                    <span style={{ fontWeight: 600, color: '#374151' }}>{(carRental.dailyRateKrw ?? 0).toLocaleString()}원 × {carRental.rentalDays}일</span>
+                    <span style={{ color: 'var(--text3)' }}>렌탈료</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text2)' }}>{(carRental.dailyRateKrw ?? 0).toLocaleString()}원 × {carRental.rentalDays}일</span>
                   </div>
                   {(carRental.estimatedFuelKrw ?? 0) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.63rem' }}>
-                      <span style={{ color: '#6B7280' }}>⛽ 연료비 (예상)</span>
-                      <span style={{ fontWeight: 600, color: '#374151' }}>{(carRental.estimatedFuelKrw ?? 0).toLocaleString()}원</span>
+                      <span style={{ color: 'var(--text3)' }}>연료비</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text2)' }}>{(carRental.estimatedFuelKrw ?? 0).toLocaleString()}원</span>
                     </div>
                   )}
                   {(carRental.estimatedTollKrw ?? 0) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.63rem' }}>
-                      <span style={{ color: '#6B7280' }}>🛣️ 통행료 (예상)</span>
-                      <span style={{ fontWeight: 600, color: '#374151' }}>{(carRental.estimatedTollKrw ?? 0).toLocaleString()}원</span>
+                      <span style={{ color: 'var(--text3)' }}>통행료</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text2)' }}>{(carRental.estimatedTollKrw ?? 0).toLocaleString()}원</span>
                     </div>
                   )}
                 </div>
-                {/* 합계 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #A7F3D0', paddingTop: 6 }}>
-                  <span style={{ fontSize: '0.63rem', color: '#6B7280' }}>렌트카 총액</span>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 900, color: '#059669' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-lt)', paddingTop: 6 }}>
+                  <span style={{ fontSize: '0.63rem', color: 'var(--text3)' }}>합계</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--primary)' }}>
                     {((carRental.dailyRateKrw ?? 0) * (carRental.rentalDays ?? 0) + (carRental.estimatedFuelKrw ?? 0) + (carRental.estimatedTollKrw ?? 0)).toLocaleString()}원
                   </span>
                 </div>
@@ -483,21 +459,20 @@ export default function TravelPlannerPage() {
             )}
 
             {accommodations.length > 0 && (
-              <div style={{ background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)', borderRadius: 10, padding: '8px 12px', border: '1px solid #DDD6FE' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--purple)', marginBottom: 3 }}>🏨 숙박</div>
+              <div style={{ background: '#fff', borderRadius: 8, padding: '8px 12px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.63rem', fontWeight: 600, color: 'var(--text3)', marginBottom: 6 }}>🏨 숙박</div>
                 {accommodations.map(acc => {
                   const nights = Math.round((new Date(acc.checkOut).getTime() - new Date(acc.checkIn).getTime()) / 86400000)
-                  // "N박차 비즈니스 호텔" 형식에서 호텔명 추출 (숫자박차 패턴 제거)
                   const cleanName = acc.hotelName.replace(/\s*\d+박차\s*/, ' ').trim()
                   const checkInDate = new Date(acc.checkIn)
                   const label = checkInDate.toLocaleDateString('ko', { month: 'short', day: 'numeric', weekday: 'short' })
                   return (
-                    <div key={acc.id} style={{ marginBottom: 5, paddingBottom: 5, borderBottom: '1px dashed #DDD6FE' }}>
+                    <div key={acc.id} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid var(--border-lt)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 600, flex: 1, marginRight: 6, color: '#4C1D95' }}>{cleanName}</div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--purple)', flexShrink: 0 }}>{((acc.pricePerNightKrw ?? 0) * nights).toLocaleString()}원</div>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 600, flex: 1, marginRight: 6, color: 'var(--text)' }}>{cleanName}</div>
+                        <div style={{ fontSize: '0.67rem', fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>{((acc.pricePerNightKrw ?? 0) * nights).toLocaleString()}원</div>
                       </div>
-                      <div style={{ fontSize: '0.6rem', color: 'var(--text3)', marginTop: 1 }}>📅 {label} · {nights}박</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text3)', marginTop: 2 }}>{label} · {nights}박</div>
                     </div>
                   )
                 })}
@@ -532,52 +507,48 @@ export default function TravelPlannerPage() {
                   >
                     {/* 상태 뱃지 */}
                     <div style={{
-                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      width: 34, height: 34, borderRadius: 8, flexShrink: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: status === 'generating' ? '0.6rem' : '0.68rem',
-                      fontWeight: 800,
-                      background: isSel ? 'linear-gradient(135deg, var(--sky-lt), var(--sky-dk))'
-                        : status === 'done' ? 'var(--mint-bg)'
+                      fontSize: '0.68rem', fontWeight: 700,
+                      background: isSel ? 'var(--primary)'
+                        : status === 'done' ? 'var(--primary-bg)'
                         : status === 'generating' ? '#FEF3C7'
-                        : 'var(--bg)',
+                        : 'var(--gray6)',
                       color: isSel ? '#fff'
-                        : status === 'done' ? 'var(--mint)'
-                        : status === 'generating' ? '#D97706'
+                        : status === 'done' ? 'var(--primary)'
+                        : status === 'generating' ? '#B45309'
                         : 'var(--text3)',
-                      boxShadow: isSel ? '0 4px 12px rgba(14,165,233,0.3)' : 'none',
                     }}>
                       {status === 'generating' ? (
-                        <span style={{ width: 14, height: 14, border: '2px solid #D97706', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/>
-                      ) : status === 'done' ? `D${dayNum}`
-                        : status === 'error' ? '⚠'
-                        : `D${dayNum}`}
+                        <span style={{ width: 13, height: 13, border: '2px solid #B45309', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/>
+                      ) : status === 'error' ? '!' : `D${dayNum}`}
                     </div>
 
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isSel ? 'var(--sky-dk)' : 'var(--text)' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: isSel ? 'var(--primary)' : 'var(--text)' }}>
                         {dayNum}일차
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text3)', marginTop: 1 }}>{actualDate}</div>
+                      <div style={{ fontSize: '0.63rem', color: 'var(--text3)', marginTop: 1 }}>{actualDate}</div>
                     </div>
 
                     <div style={{ flexShrink: 0, textAlign: 'right' }}>
                       {status === 'done' && day && (
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text3)' }}>{day.routes.length}경로</div>
+                        <div style={{ fontSize: '0.63rem', color: 'var(--text3)' }}>{day.routes.length}경로</div>
                       )}
-                      {/* 생성/재생성 버튼 */}
                       {status === 'pending' || status === 'error' ? (
                         <button onClick={e => { e.stopPropagation(); generateDay(dayNum) }}
                           disabled={dayNum > 1 && dayStatus[dayNum - 1] !== 'done'}
                           style={{
-                            padding: '4px 10px', borderRadius: 8, border: 'none', fontSize: '0.7rem', fontWeight: 700,
-                            background: dayNum > 1 && dayStatus[dayNum - 1] !== 'done' ? 'var(--border)' : 'linear-gradient(135deg, #FBBF24, #F59E0B)',
-                            color: '#fff', cursor: dayNum > 1 && dayStatus[dayNum - 1] !== 'done' ? 'not-allowed' : 'pointer',
+                            padding: '3px 9px', borderRadius: 6, border: 'none', fontSize: '0.68rem', fontWeight: 600,
+                            background: dayNum > 1 && dayStatus[dayNum - 1] !== 'done' ? 'var(--gray6)' : 'var(--primary)',
+                            color: dayNum > 1 && dayStatus[dayNum - 1] !== 'done' ? 'var(--text3)' : '#fff',
+                            cursor: dayNum > 1 && dayStatus[dayNum - 1] !== 'done' ? 'not-allowed' : 'pointer',
                           }}>
                           {status === 'error' ? '재시도' : '생성'}
                         </button>
                       ) : status === 'done' ? (
                         <button onClick={e => { e.stopPropagation(); generateDay(dayNum) }}
-                          style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: '0.65rem', background: '#fff', color: 'var(--text3)', cursor: 'pointer' }}>
+                          style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.63rem', background: '#fff', color: 'var(--text3)', cursor: 'pointer' }}>
                           🔄
                         </button>
                       ) : null}
@@ -589,28 +560,28 @@ export default function TravelPlannerPage() {
 
           </div>
 
-          {/* ── 상태 변경 버튼 (사이드바 하단) ── */}
-          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-lt)', background: '#F8FAFC', flexShrink: 0 }}>
+          {/* ── 상태 변경 버튼 ── */}
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-lt)', background: '#fff', flexShrink: 0 }}>
             {travel?.status === 'DRAFT' && (
               <button onClick={() => updateStatus('CONFIRMED')} disabled={statusUpdating} style={{
-                width: '100%', padding: '10px', borderRadius: 10, border: 'none',
-                background: 'linear-gradient(135deg, #00B894, #00CEC9)', color: '#fff',
-                fontSize: '0.82rem', fontWeight: 800, cursor: 'pointer', opacity: statusUpdating ? 0.6 : 1,
+                width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                background: 'var(--primary)', color: '#fff',
+                fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', opacity: statusUpdating ? 0.6 : 1,
               }}>
-                {statusUpdating ? '변경 중...' : '✅ 여행 확정하기'}
+                {statusUpdating ? '처리 중...' : '여행 확정하기'}
               </button>
             )}
             {travel?.status === 'CONFIRMED' && (
               <button onClick={() => updateStatus('COMPLETED')} disabled={statusUpdating} style={{
-                width: '100%', padding: '10px', borderRadius: 10, border: 'none',
-                background: 'linear-gradient(135deg, #636E72, #B2BEC3)', color: '#fff',
-                fontSize: '0.82rem', fontWeight: 800, cursor: 'pointer', opacity: statusUpdating ? 0.6 : 1,
+                width: '100%', padding: '10px', borderRadius: 8, border: 'none',
+                background: 'var(--gray3)', color: '#fff',
+                fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', opacity: statusUpdating ? 0.6 : 1,
               }}>
-                {statusUpdating ? '변경 중...' : '🏁 여행 완료 처리'}
+                {statusUpdating ? '처리 중...' : '여행 완료 처리'}
               </button>
             )}
             {travel?.status === 'COMPLETED' && (
-              <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#888', padding: '6px 0' }}>🏅 완료된 여행이에요</div>
+              <div style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--text3)', padding: '6px 0' }}>완료된 여행이에요 🏅</div>
             )}
           </div>
 
@@ -623,7 +594,7 @@ export default function TravelPlannerPage() {
           <div style={{ padding: '20px 32px 16px', background: '#fff', borderBottom: '1px solid var(--border-lt)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, background: 'var(--sky)', color: '#fff', padding: '3px 10px', borderRadius: 6 }}>DAY {selectedDay}</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, background: 'var(--primary-bg)', color: 'var(--primary)', padding: '3px 10px', borderRadius: 6, border: '1px solid var(--primary-pale)' }}>DAY {selectedDay}</div>
                 <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text)' }}>
                   {currentDay?.date
                     ? new Date(currentDay.date).toLocaleDateString('ko', { month: 'long', day: 'numeric', weekday: 'short' })
@@ -645,10 +616,10 @@ export default function TravelPlannerPage() {
                 {([['timeline', '📋 타임라인'], ['map', '🗺️ 지도']] as const).map(([mode, label]) => (
                   <button key={mode} onClick={() => { if (mode === 'map') setMapEverShown(true); setViewMode(mode) }}
                     style={{
-                      padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: '0.82rem', fontWeight: 700,
+                      padding: '7px 14px', borderRadius: 7, border: 'none', fontSize: '0.82rem', fontWeight: 600,
                       background: viewMode === mode ? '#fff' : 'transparent',
-                      color: viewMode === mode ? 'var(--sky-dk)' : 'var(--text3)',
-                      boxShadow: viewMode === mode ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+                      color: viewMode === mode ? 'var(--primary)' : 'var(--text3)',
+                      boxShadow: viewMode === mode ? 'var(--shadow-sm)' : 'none',
                       cursor: 'pointer', transition: 'all 0.15s',
                     }}>{label}</button>
                 ))}
@@ -731,14 +702,12 @@ export default function TravelPlannerPage() {
           title="그룹 멤버"
           style={{
             width: 48, height: 48, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: showMembers
-              ? 'linear-gradient(135deg, #F97316, #EA580C)'
-              : 'linear-gradient(135deg, #fff, #f8fafc)',
-            color: showMembers ? '#fff' : '#F97316',
-            fontSize: '1.3rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            background: showMembers ? 'var(--primary)' : '#fff',
+            color: showMembers ? '#fff' : 'var(--primary)',
+            fontSize: '1.2rem', boxShadow: 'var(--shadow)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s',
-            border: showMembers ? 'none' : '2px solid #FED7AA',
+            border: showMembers ? 'none' : '1.5px solid var(--border)',
           } as React.CSSProperties}
         >
           👥
@@ -755,15 +724,13 @@ export default function TravelPlannerPage() {
           title="그룹 채팅"
           style={{
             width: 48, height: 48, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: showChat
-              ? 'linear-gradient(135deg, #0EA5E9, #0284C7)'
-              : 'linear-gradient(135deg, #fff, #f8fafc)',
-            color: showChat ? '#fff' : '#0EA5E9',
-            fontSize: '1.3rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            background: showChat ? 'var(--blue)' : '#fff',
+            color: showChat ? '#fff' : 'var(--blue)',
+            fontSize: '1.2rem', boxShadow: 'var(--shadow)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s',
             position: 'relative',
-            border: showChat ? 'none' : '2px solid #BAE6FD',
+            border: showChat ? 'none' : '1.5px solid var(--border)',
           } as React.CSSProperties}
         >
           💬
@@ -834,37 +801,39 @@ function DayPendingCard({
   isError?: boolean
 }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 20, border: isError ? '2px solid #FECACA' : '2px dashed var(--border)', overflow: 'hidden', animation: 'fadeUp 0.35s ease both' }}>
+    <div style={{ background: '#fff', borderRadius: 16, border: isError ? '1.5px solid #FECACA' : '1.5px dashed var(--border)', overflow: 'hidden', animation: 'fadeUp 0.3s ease both' }}>
       {/* 헤더 */}
-      <div style={{ background: isError ? 'linear-gradient(135deg, #FEF2F2, #FFF1F1)' : 'linear-gradient(135deg, #FFFBEB, #FEF3C7)', padding: '32px 32px 20px', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: 12 }}>{isError ? '⚠️' : '✨'}</div>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 6, color: isError ? '#B91C1C' : '#1e293b' }}>
-          {isError ? `${dayNum}일차 생성 중 오류가 발생했어요` : `${dayNum}일차 일정을 어떻게 만들어드릴까요?`}
+      <div style={{ background: isError ? 'var(--red-bg)' : 'var(--primary-bg)', padding: '28px 32px 18px', textAlign: 'center', borderBottom: `1px solid ${isError ? '#FECACA' : 'var(--primary-pale)'}` }}>
+        <div style={{ fontSize: '2.2rem', marginBottom: 10 }}>{isError ? '⚠️' : '✏️'}</div>
+        <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 6, color: isError ? '#B91C1C' : 'var(--text)' }}>
+          {isError ? `${dayNum}일차 생성 중 오류가 발생했어요` : `${dayNum}일차 일정을 어떻게 만들까요?`}
         </h3>
-        <p style={{ color: 'var(--text3)', fontSize: '0.82rem' }}>
+        <p style={{ color: 'var(--text3)', fontSize: '0.8rem' }}>
           {isError
-            ? '아래에 원하는 스타일을 입력하고 다시 시도해보세요.'
-            : `원하는 스타일을 적어주시면 AI가 맞춤 일정을 만들어드려요. (~15초)`}
+            ? '원하는 스타일을 입력하고 다시 시도해보세요.'
+            : '원하는 스타일을 적어주시면 AI가 맞춤 일정을 만들어드려요. (~15초)'}
         </p>
       </div>
 
-      {/* 프롬프트 입력 영역 */}
-      <div style={{ padding: '20px 28px 28px' }}>
+      {/* 입력 영역 */}
+      <div style={{ padding: '20px 24px 24px' }}>
         {!prevDone ? (
-          <div style={{ textAlign: 'center', padding: '20px', background: '#F8FAFC', borderRadius: 12, color: 'var(--text3)', fontSize: '0.85rem' }}>
-            ⚠️ {dayNum - 1}일차를 먼저 완성해주세요.
+          <div style={{ textAlign: 'center', padding: '20px', background: 'var(--gray7)', borderRadius: 10, color: 'var(--text3)', fontSize: '0.85rem', border: '1px solid var(--border-lt)' }}>
+            {dayNum - 1}일차를 먼저 완성해주세요.
           </div>
         ) : (
           <>
             {/* 예시 칩 */}
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: 8 }}>💡 이런 스타일 어때요?</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>이런 스타일 어때요?</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
               {WISH_EXAMPLES.map(ex => (
                 <button key={ex} onClick={() => onWishChange(ex)}
                   style={{
-                    padding: '4px 10px', borderRadius: 20, border: '1px solid #FDE68A',
-                    background: wish === ex ? '#FEF3C7' : '#fff', color: '#92400E',
-                    fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                    padding: '4px 10px', borderRadius: 20,
+                    border: `1px solid ${wish === ex ? 'var(--primary)' : 'var(--border)'}`,
+                    background: wish === ex ? 'var(--primary-bg)' : '#fff',
+                    color: wish === ex ? 'var(--primary)' : 'var(--text2)',
+                    fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
                   }}>{ex}</button>
               ))}
             </div>
@@ -877,35 +846,34 @@ function DayPendingCard({
               rows={3}
               maxLength={300}
               style={{
-                width: '100%', borderRadius: 12, border: '1.5px solid #FDE68A',
+                width: '100%', borderRadius: 10, border: '1.5px solid var(--border)',
                 padding: '12px 14px', fontSize: '0.85rem', lineHeight: 1.6,
                 resize: 'vertical', outline: 'none', fontFamily: 'inherit',
-                color: '#1e293b', background: '#FFFBEB', boxSizing: 'border-box',
+                color: 'var(--text)', background: '#fff', boxSizing: 'border-box',
                 transition: 'border-color 0.15s',
               }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#F59E0B'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245,158,11,0.15)' }}
-              onBlur={e => { e.currentTarget.style.borderColor = '#FDE68A'; e.currentTarget.style.boxShadow = 'none' }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-pale)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none' }}
               onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onGenerate(wish) }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-              <span style={{ fontSize: '0.63rem', color: '#9CA3AF' }}>비워두면 AI가 자유롭게 구성 · ⌘+Enter로 생성</span>
-              <span style={{ fontSize: '0.63rem', color: '#9CA3AF' }}>{wish.length}/300</span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--text3)' }}>비워두면 AI가 자유롭게 구성 · ⌘+Enter로 생성</span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--text3)' }}>{wish.length}/300</span>
             </div>
 
             {/* 생성 버튼 */}
             <button
               onClick={() => onGenerate(wish)}
               style={{
-                width: '100%', marginTop: 16, padding: '14px', borderRadius: 14, border: 'none',
-                fontSize: '1rem', fontWeight: 700,
-                background: 'linear-gradient(135deg, #FBBF24, #F59E0B)',
-                color: '#fff', boxShadow: '0 6px 20px rgba(245,158,11,0.4)',
-                cursor: 'pointer', transition: 'all 0.15s',
+                width: '100%', marginTop: 14, padding: '13px', borderRadius: 10, border: 'none',
+                fontSize: '0.95rem', fontWeight: 700,
+                background: 'var(--primary)', color: '#fff',
+                cursor: 'pointer', transition: 'background 0.15s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 24px rgba(245,158,11,0.5)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = ''; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 20px rgba(245,158,11,0.4)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary-dk)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--primary)' }}
             >
-              {isError ? `🔄 ${dayNum}일차 다시 생성하기` : `✨ ${dayNum}일차 일정 만들기`}
+              {isError ? `${dayNum}일차 다시 생성하기` : `${dayNum}일차 일정 만들기`}
             </button>
           </>
         )}
@@ -916,23 +884,23 @@ function DayPendingCard({
 
 function DayGeneratingCard({ dayNum }: { dayNum: number }) {
   return (
-    <div style={{ textAlign: 'center', padding: '72px 32px', background: 'linear-gradient(135deg, #FFFBEB, #FEF3C7)', borderRadius: 20, border: '1px solid #FDE68A' }}>
-      <div style={{ width: 48, height: 48, border: '4px solid #FDE68A', borderTopColor: '#F59E0B', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite', marginBottom: 20 }}/>
-      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#92400E', marginBottom: 8 }}>Claude AI가 {dayNum}일차를 구성 중...</h3>
-      <p style={{ color: '#B45309', fontSize: '0.85rem', animation: 'pulse 2s infinite' }}>맛집·관광지·동선을 최적화하고 있어요. 약 15초 소요.</p>
+    <div style={{ textAlign: 'center', padding: '64px 32px', background: 'var(--primary-bg)', borderRadius: 16, border: '1px solid var(--primary-pale)' }}>
+      <div style={{ width: 40, height: 40, border: '3px solid var(--primary-pale)', borderTopColor: 'var(--primary)', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite', marginBottom: 20 }}/>
+      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>AI가 {dayNum}일차를 구성하는 중...</h3>
+      <p style={{ color: 'var(--text3)', fontSize: '0.82rem' }}>맛집·관광지·동선을 최적화하고 있어요. 약 15초 소요.</p>
     </div>
   )
 }
 
 function NextDayBanner({ dayNum, onGenerate }: { dayNum: number; onGenerate: () => void }) {
   return (
-    <div style={{ background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', borderRadius: 16, padding: '20px 24px', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div style={{ background: 'var(--primary-bg)', borderRadius: 12, padding: '18px 22px', border: '1px solid var(--primary-pale)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 }}>
       <div>
-        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--sky-dk)', marginBottom: 4 }}>👍 {dayNum - 1}일차 완성!</div>
-        <div style={{ fontSize: '0.82rem', color: 'var(--text3)' }}>{dayNum}일차 일정도 만들어 볼까요?</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>{dayNum - 1}일차 완성!</div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>{dayNum}일차 일정도 만들어 볼까요?</div>
       </div>
-      <button onClick={onGenerate} style={{ padding: '12px 22px', borderRadius: 12, border: 'none', fontWeight: 700, fontSize: '0.9rem', background: 'linear-gradient(135deg, var(--sky-lt), var(--sky-dk))', color: '#fff', boxShadow: '0 4px 14px rgba(14,165,233,0.3)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        → {dayNum}일차로 이동
+      <button onClick={onGenerate} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', fontWeight: 600, fontSize: '0.88rem', background: 'var(--primary)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        {dayNum}일차로 이동 →
       </button>
     </div>
   )
@@ -1242,23 +1210,23 @@ function DayModifyBox({ travelId, dayNum, onModified }: {
   }
 
   return (
-    <div style={{ marginTop: 20, borderRadius: 18, border: '1.5px solid #E0E7FF', background: 'linear-gradient(135deg, #F0F4FF, #FAF5FF)', padding: '18px 20px', animation: 'fadeUp 0.4s ease both' }}>
+    <div style={{ marginTop: 20, borderRadius: 12, border: '1px solid var(--border)', background: '#fff', padding: '18px 20px', animation: 'fadeUp 0.3s ease both' }}>
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>✏️</div>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--primary-bg)', border: '1px solid var(--primary-pale)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>✏️</div>
         <div>
-          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#312E81' }}>AI에게 {dayNum}일차 수정 요청</div>
-          <div style={{ fontSize: '0.7rem', color: '#6B7280', marginTop: 1 }}>원하는 변경사항을 자유롭게 입력하면 AI가 일정을 조정해줘요</div>
+          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text)' }}>AI에게 {dayNum}일차 수정 요청</div>
+          <div style={{ fontSize: '0.68rem', color: 'var(--text3)', marginTop: 1 }}>원하는 변경사항을 입력하면 AI가 일정을 조정해줘요</div>
         </div>
       </div>
 
-      {/* 예시 프롬프트 칩 */}
+      {/* 예시 칩 */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {EXAMPLE_PROMPTS.map(ex => (
           <button key={ex} onClick={() => { setPrompt(ex); textareaRef.current?.focus() }}
-            style={{ padding: '4px 10px', borderRadius: 20, border: '1px solid #C7D2FE', background: '#fff', color: '#4338CA', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EEF2FF'; b.style.borderColor = '#818CF8' }}
-            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#C7D2FE' }}
+            style={{ padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border)', background: '#fff', color: 'var(--text2)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = 'var(--primary)'; b.style.color = 'var(--primary)' }}
+            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text2)' }}
           >{ex}</button>
         ))}
       </div>
@@ -1274,43 +1242,41 @@ function DayModifyBox({ travelId, dayNum, onModified }: {
           rows={3}
           maxLength={500}
           style={{
-            width: '100%', borderRadius: 12, border: '1.5px solid #C7D2FE', padding: '12px 14px',
+            width: '100%', borderRadius: 10, border: '1.5px solid var(--border)', padding: '12px 14px',
             fontSize: '0.85rem', lineHeight: 1.6, resize: 'vertical', outline: 'none',
-            fontFamily: 'inherit', color: '#1E1B4B', background: '#fff',
+            fontFamily: 'inherit', color: 'var(--text)', background: '#fff',
             boxSizing: 'border-box', transition: 'border-color 0.15s',
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
-          onBlur={e => { e.currentTarget.style.borderColor = '#C7D2FE'; e.currentTarget.style.boxShadow = 'none' }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-pale)' }}
+          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none' }}
         />
-        <div style={{ position: 'absolute', bottom: 8, right: 10, fontSize: '0.63rem', color: '#9CA3AF' }}>{prompt.length}/500</div>
+        <div style={{ position: 'absolute', bottom: 8, right: 10, fontSize: '0.62rem', color: 'var(--text3)' }}>{prompt.length}/500</div>
       </div>
 
-      {/* 하단: 단축키 안내 + 버튼 */}
+      {/* 하단 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-        <span style={{ fontSize: '0.68rem', color: '#9CA3AF' }}>⌘+Enter 또는 Ctrl+Enter로 전송</span>
+        <span style={{ fontSize: '0.66rem', color: 'var(--text3)' }}>⌘+Enter로 전송</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {status === 'done' && (
-            <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, animation: 'fadeUp 0.3s ease' }}>✅ 수정 완료!</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, animation: 'fadeUp 0.3s ease' }}>수정 완료!</span>
           )}
           {status === 'error' && (
-            <span style={{ fontSize: '0.72rem', color: '#EF4444' }}>⚠️ {errMsg}</span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--red)' }}>{errMsg}</span>
           )}
           <button
             onClick={submit}
             disabled={!prompt.trim() || status === 'loading'}
             style={{
-              padding: '9px 20px', borderRadius: 10, border: 'none', fontSize: '0.83rem', fontWeight: 700,
-              background: !prompt.trim() || status === 'loading'
-                ? '#E0E7FF' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
-              color: !prompt.trim() || status === 'loading' ? '#A5B4FC' : '#fff',
+              padding: '9px 18px', borderRadius: 8, border: 'none', fontSize: '0.83rem', fontWeight: 600,
+              background: !prompt.trim() || status === 'loading' ? 'var(--gray6)' : 'var(--primary)',
+              color: !prompt.trim() || status === 'loading' ? 'var(--text3)' : '#fff',
               cursor: !prompt.trim() || status === 'loading' ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
-              boxShadow: prompt.trim() && status !== 'loading' ? '0 4px 14px rgba(99,102,241,0.35)' : 'none',
+              display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.15s',
             }}
           >
             {status === 'loading'
-              ? <><span style={{ width: 14, height: 14, border: '2px solid #A5B4FC', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> AI 수정 중...</>
-              : '✨ 수정 요청'}
+              ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> 수정 중...</>
+              : '수정 요청'}
           </button>
         </div>
       </div>
@@ -1328,7 +1294,7 @@ function MovementArrow({ route }: { route: Route }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 18px', margin: '4px 0' }}>
       {/* 선 */}
-      <div style={{ width: 2, height: 36, background: `linear-gradient(to bottom, ${color}80, ${color}20)`, borderRadius: 1, marginLeft: 21 }} />
+      <div style={{ width: 2, height: 36, background: `${color}40`, borderRadius: 1, marginLeft: 21 }} />
       {/* 이동 배지 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: bg, border: `1px solid ${color}30`, borderRadius: 20, padding: '5px 12px', flexShrink: 0 }}>
         <span style={{ fontSize: '0.8rem' }}>{icon}</span>

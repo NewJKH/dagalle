@@ -123,7 +123,7 @@ export default function MemberPanel({ travelId, myUserId, myRole, onClose, onMem
     }}>
       {/* 헤더 */}
       <div style={{
-        background: `linear-gradient(135deg, ${coral}, #EA580C)`,
+        background: `var(--primary)`,
         padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>👥 그룹 멤버</span>
@@ -161,7 +161,7 @@ export default function MemberPanel({ travelId, myUserId, myRole, onClose, onMem
                 {/* 아바타 */}
                 <div style={{
                   width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                  background: `linear-gradient(135deg, ${cfg.color}30, ${cfg.color}60)`,
+                  background: `${cfg.color}18`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.85rem', fontWeight: 700, color: cfg.color,
                   border: `2px solid ${cfg.color}40`,
@@ -260,7 +260,7 @@ export default function MemberPanel({ travelId, myUserId, myRole, onClose, onMem
               disabled={!inviteEmail.trim() || inviting}
               style={{
                 padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: inviteEmail.trim() ? `linear-gradient(135deg, ${coral}, #EA580C)` : '#e2e8f0',
+                background: inviteEmail.trim() ? 'var(--primary)' : 'var(--gray5)',
                 color: inviteEmail.trim() ? '#fff' : '#94a3b8',
                 fontSize: '0.8rem', fontWeight: 700, flexShrink: 0, transition: 'all 0.15s',
               }}

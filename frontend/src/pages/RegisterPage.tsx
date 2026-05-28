@@ -68,14 +68,14 @@ export default function RegisterPage() {
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(145deg, #F0F9FF 0%, #fff 60%, #FFF7ED 100%)',
+      background: 'var(--gray7)',
       padding: '80px 24px',
     }}>
       <div style={{ width: '100%', maxWidth: 500 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, var(--sky-lt), var(--sky-dk))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, boxShadow: '0 4px 12px rgba(14,165,233,0.3)' }}>✈️</div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✈️</div>
             <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text)' }}>다갈래<span style={{ color: 'var(--coral)' }}>.</span></span>
           </Link>
           <h1 style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em', marginBottom: 6 }}>회원가입</h1>
@@ -108,7 +108,7 @@ export default function RegisterPage() {
                     fontSize: '0.9rem', background: '#fff', color: 'var(--text)',
                     transition: 'border-color 0.15s, box-shadow 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = 'var(--sky)'; e.target.style.boxShadow = '0 0 0 3px rgba(14,165,233,0.1)' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--sky)'; e.target.style.boxShadow = '0 0 0 3px var(--primary-pale)' }}
                   onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
                 />
               </div>
@@ -130,13 +130,13 @@ export default function RegisterPage() {
                       style={{
                         padding: '14px 10px', borderRadius: 14, cursor: 'pointer',
                         border: selected ? '2px solid var(--sky)' : '1.5px solid var(--border)',
-                        background: selected ? 'var(--sky-bg)' : '#fff',
+                        background: selected ? 'var(--primary-bg)' : '#fff',
                         transition: 'all 0.15s', textAlign: 'center',
-                        boxShadow: selected ? '0 0 0 3px rgba(14,165,233,0.1)' : 'none',
+                        boxShadow: selected ? '0 0 0 3px var(--primary-pale)' : 'none',
                       }}
                     >
                       <div style={{ fontSize: '1.4rem', marginBottom: 6 }}>{opt.icon}</div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: selected ? 'var(--sky-dk)' : 'var(--text)', marginBottom: 3 }}>{opt.label}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: selected ? 'var(--primary)' : 'var(--text)', marginBottom: 3 }}>{opt.label}</div>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text3)', lineHeight: 1.4 }}>{opt.desc}</div>
                     </button>
                   )
@@ -146,8 +146,8 @@ export default function RegisterPage() {
 
             <button type="submit" disabled={loading} style={{
               marginTop: 8, padding: '14px', borderRadius: 12, fontSize: '0.95rem', fontWeight: 700,
-              background: loading ? 'var(--border)' : 'linear-gradient(135deg, var(--sky-lt), var(--sky-dk))',
-              color: '#fff', boxShadow: loading ? 'none' : '0 6px 20px rgba(14,165,233,0.35)',
+              background: loading ? 'var(--gray5)' : 'var(--primary)',
+              color: '#fff', boxShadow: 'none',
               transition: 'all 0.2s', cursor: loading ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               border: 'none',

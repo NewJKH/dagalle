@@ -3,8 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
-  const navigate  = useNavigate()
-  const location  = useLocation()
+  const navigate   = useNavigate()
+  const location   = useLocation()
   const isLoggedIn = !!localStorage.getItem('accessToken')
   const isLanding  = location.pathname === '/'
 
@@ -13,12 +13,6 @@ export default function Navbar() {
     window.addEventListener('scroll', fn)
     return () => window.removeEventListener('scroll', fn)
   }, [])
-
-  const logout = () => {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    navigate('/')
-  }
 
   const solid = scrolled || !isLanding
 
@@ -34,11 +28,11 @@ export default function Navbar() {
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
       height: 64,
       background: solid ? '#fff' : 'transparent',
-      borderBottom: solid ? '1px solid #EBEBEB' : 'none',
-      boxShadow: scrolled ? '0 2px 16px rgba(0,0,0,0.07)' : 'none',
+      borderBottom: solid ? '1px solid var(--border-lt)' : 'none',
+      boxShadow: scrolled ? 'var(--shadow-sm)' : 'none',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 40px',
-      transition: 'all 0.25s',
+      transition: 'all 0.2s',
     }}>
       {/* 로고 */}
       <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
@@ -53,8 +47,8 @@ export default function Navbar() {
           </svg>
         </div>
         <span style={{
-          fontSize: '1.15rem', fontWeight: 900, letterSpacing: '-0.03em',
-          color: solid ? '#1A1A1A' : '#fff',
+          fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.03em',
+          color: solid ? 'var(--black)' : '#fff',
         }}>
           다갈래
         </span>
@@ -65,12 +59,12 @@ export default function Navbar() {
         {NAV_LINKS.map(({ label, href }) => (
           <a key={label} href={href} style={{
             padding: '8px 16px', borderRadius: 6,
-            fontSize: '0.875rem', fontWeight: 600,
-            color: solid ? '#444' : 'rgba(255,255,255,0.9)',
-            transition: 'all 0.15s', textDecoration: 'none',
+            fontSize: '0.875rem', fontWeight: 500,
+            color: solid ? 'var(--text2)' : 'rgba(255,255,255,0.88)',
+            transition: 'color 0.15s', textDecoration: 'none',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = solid ? '#F5F5F5' : 'rgba(255,255,255,0.12)'; (e.currentTarget as HTMLAnchorElement).style.color = solid ? '#1A1A1A' : '#fff' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; (e.currentTarget as HTMLAnchorElement).style.color = solid ? '#444' : 'rgba(255,255,255,0.9)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = solid ? 'var(--primary)' : '#fff' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = solid ? 'var(--text2)' : 'rgba(255,255,255,0.88)' }}
           >{label}</a>
         ))}
       </div>
@@ -80,44 +74,41 @@ export default function Navbar() {
         {isLoggedIn ? (
           <>
             <Link to="/travels" style={{
-              padding: '8px 18px', borderRadius: 8,
-              fontSize: '0.875rem', fontWeight: 600,
-              color: solid ? '#444' : 'rgba(255,255,255,0.9)',
-              border: `1.5px solid ${solid ? '#E0E0E0' : 'rgba(255,255,255,0.35)'}`,
+              padding: '7px 16px', borderRadius: 7,
+              fontSize: '0.875rem', fontWeight: 500,
+              color: solid ? 'var(--text2)' : 'rgba(255,255,255,0.88)',
+              border: `1px solid ${solid ? 'var(--border)' : 'rgba(255,255,255,0.3)'}`,
               transition: 'all 0.15s', textDecoration: 'none',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--primary)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--primary)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = solid ? '#E0E0E0' : 'rgba(255,255,255,0.35)'; (e.currentTarget as HTMLAnchorElement).style.color = solid ? '#444' : 'rgba(255,255,255,0.9)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = solid ? 'var(--border)' : 'rgba(255,255,255,0.3)'; (e.currentTarget as HTMLAnchorElement).style.color = solid ? 'var(--text2)' : 'rgba(255,255,255,0.88)' }}
             >내 여행</Link>
             <Link to="/profile" style={{
-              width: 36, height: 36, borderRadius: '50%',
-              background: solid ? 'var(--primary)' : 'rgba(255,255,255,0.2)',
-              border: solid ? 'none' : '1.5px solid rgba(255,255,255,0.4)',
+              width: 34, height: 34, borderRadius: '50%',
+              background: 'var(--primary)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.75rem', fontWeight: 800, color: '#fff', textDecoration: 'none',
-              transition: 'all 0.15s',
+              fontSize: '0.7rem', fontWeight: 700, color: '#fff', textDecoration: 'none',
             }}>MY</Link>
           </>
         ) : (
           <>
             <Link to="/login" style={{
-              padding: '8px 18px', borderRadius: 8,
-              fontSize: '0.875rem', fontWeight: 600,
-              color: solid ? '#444' : 'rgba(255,255,255,0.9)',
+              padding: '7px 16px', borderRadius: 7,
+              fontSize: '0.875rem', fontWeight: 500,
+              color: solid ? 'var(--text2)' : 'rgba(255,255,255,0.88)',
               transition: 'color 0.15s', textDecoration: 'none',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--primary)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = solid ? '#444' : 'rgba(255,255,255,0.9)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = solid ? 'var(--text2)' : 'rgba(255,255,255,0.88)' }}
             >로그인</Link>
             <Link to="/register" style={{
-              padding: '9px 22px', borderRadius: 8,
-              fontSize: '0.875rem', fontWeight: 700,
+              padding: '8px 20px', borderRadius: 7,
+              fontSize: '0.875rem', fontWeight: 600,
               background: 'var(--primary)', color: '#fff',
-              boxShadow: '0 2px 10px rgba(255,92,0,0.35)',
-              transition: 'all 0.15s', textDecoration: 'none',
+              transition: 'background 0.15s', textDecoration: 'none',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--primary-dk)'; (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--primary)'; (e.currentTarget as HTMLAnchorElement).style.transform = '' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--primary-dk)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--primary)' }}
             >무료 시작하기</Link>
           </>
         )}

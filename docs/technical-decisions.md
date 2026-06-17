@@ -1,0 +1,247 @@
+# 기술적 의사결정 & 트러블슈팅 (다갈래)
+
+> 면접·포트폴리오용. 각 항목은 **배경 → 결정 → 장점 → 트레이드오프 → 보완** 순서로 정리했고,
+> 마지막에 근거가 되는 실제 코드 위치와 면접에서 말할 포인트를 붙였다.
+
+핵심 의사결정 6가지:
+1. [JWT 무상태 인증 + Redis refresh 토큰](#1-jwt-무상태-인증--redis-refresh-토큰)
+2. [WebSocket 실시간 협업 편집](#2-websocket-실시간-협업-편집)
+3. [트러블슈팅 — 교통비 오류와 "AI 값을 믿지 않는" 설계](#3-트러블슈팅--교통비-오류와-ai-값을-믿지-않는-설계)
+4. [AI 호출 비용·지연 최적화](#4-ai-호출-비용지연-최적화)
+5. [무거운 점수 계산을 배치(cron)로 분리](#5-무거운-점수-계산을-배치cron로-분리)
+6. [인터페이스 추상화로 구현 교체 가능하게](#6-인터페이스-추상화로-구현-교체-가능하게)
+
+---
+
+## 1. JWT 무상태 인증 + Redis refresh 토큰
+
+**배경**
+로그인 상태를 유지해야 하는데, 서버를 여러 대로 늘릴 수 있는 구조를 원했다. 전통적 세션 방식은
+로그인 상태가 특정 서버 메모리에 묶여 있어 스케일아웃 시 "세션이 어느 서버에 있나" 문제가 생긴다.
+
+**결정**
+Spring Security를 `SessionCreationPolicy.STATELESS`로 설정하고 JWT 기반 인증을 채택했다.
+요청마다 `JwtAuthenticationFilter`가 토큰을 검증한다.
+
+**장점**
+- 서버가 세션 상태를 들고 있지 않으므로 **수평 확장이 자유롭다.**
+- 토큰 자체에 신원이 담겨 있어 인증을 위한 DB/세션 조회가 필요 없다.
+
+**트레이드오프**
+- JWT는 한 번 발급하면 만료 전까지 유효해서 **즉시 무효화(로그아웃·탈취 대응)가 어렵다.**
+- access 토큰 수명을 길게 잡으면 보안 위험, 짧게 잡으면 사용자가 자주 끊긴다.
+
+**보완**
+- access 토큰은 짧게(30분), refresh 토큰은 길게(7일) 분리.
+- refresh 토큰을 **Redis에 TTL과 함께 저장**해서, 로그아웃 시 서버에서 토큰을 삭제하면
+  재발급을 막을 수 있다 → 무상태의 약점을 부분적으로 보완.
+- 로그인 API에는 `LoginRateLimiter`로 무차별 대입 차단.
+
+**코드 위치**
+- `common/security/SecurityConfig.java:37` (STATELESS)
+- `common/security/JwtAuthenticationFilter.java`, `JwtTokenProvider.java`, `LoginRateLimiter.java`
+- `common/token/TokenStore.java` (+ Redis/InMemory 구현)
+
+**면접 포인트**
+"무상태의 확장성을 취하되, JWT의 본질적 약점인 즉시 무효화 불가를 refresh 토큰을 Redis에서
+관리하는 방식으로 보완했다"는 트레이드오프 인식을 보여줄 수 있다.
+
+---
+
+## 2. WebSocket 실시간 협업 편집
+
+**배경**
+팀 여행 기능에서 **여러 명이 동시에 같은 일정을 보고 편집**한다. REST만 쓰면 남이 바꾼 내용을
+보려면 새로고침해야 하는데, 협업 편집 UX로는 부적절했다.
+
+**결정**
+STOMP over WebSocket(`/ws`, SockJS 폴백)을 도입. 한 명이 일정을 수정하면
+`WebSocketEventPublisher`가 `/topic`으로 변경을 브로드캐스트해 다른 멤버 화면에 즉시 반영한다.
+채팅도 같은 채널을 사용한다.
+
+**장점**
+- 폴링 없이 **변경이 실시간 전파**된다.
+- 채팅·일정 동기화를 하나의 통신 인프라로 통합.
+
+**트레이드오프**
+- WebSocket은 연결 후 계속 열려 있는 통로라 **일반 REST 보안 필터 체인을 타지 않는다.**
+  → 인증 공백이 생길 수 있다.
+- 연결 상태 관리(재연결 등) 부담이 REST보다 크다.
+
+**보완**
+- `JwtChannelInterceptor`로 **STOMP 핸드셰이크 시점에 JWT를 검증**해 인증 공백을 막았다.
+  (REST는 필터, WebSocket은 채널 인터셉터로 인증 경로를 이원화)
+- 프론트는 `@stomp/stompjs` + `sockjs-client`로 브라우저 호환성 확보.
+
+**코드 위치**
+- `common/websocket/WebSocketConfig.java` (엔드포인트·브로커)
+- `common/websocket/JwtChannelInterceptor.java` (핸드셰이크 인증)
+- `common/websocket/WebSocketEventPublisher.java`
+- `domain/plan/service/PlanRouteService.java`의 `publishDayUpdate()` (실제 브로드캐스트 호출)
+- 프론트: `frontend/src/hooks/useWebSocket.ts`
+
+**면접 포인트**
+"REST와 WebSocket은 인증이 적용되는 지점이 다르다"는 점을 인지하고, 두 경로에 각각
+인증 장치를 둔 것 — 흔히 놓치는 보안 공백을 메운 사례.
+
+---
+
+## 3. 트러블슈팅 — 교통비 오류와 "AI 값을 믿지 않는" 설계
+
+**증상**
+일본 여행 일정에서 **도보 이동에 1,400원, 지하철에 600원** 같은 말이 안 되는 교통비가 표시됐다.
+
+**원인 분석**
+일정 생성 시 Claude가 내려준 JSON의 `estimatedCost`(교통비 추정값)를 **그대로 DB에 저장**하고
+있었다. LLM은 비용 같은 수치를 자주 틀리게(할루시네이션) 내놓는데, 그 값을 검증 없이 신뢰한 것이
+근본 원인이었다.
+- 도보는 원래 0원이어야 하는데 LLM이 임의 금액을 넣음.
+- 일본 지하철은 **거리별 요금제**인데 LLM이 한국식·임의값으로 답함.
+
+**결정**
+"교통비는 LLM이 아니라 코드가 계산한다"로 정책을 바꿨다. 저장 시점에 교통수단별로 분기:
+- `WALK` → 무조건 0원 (AI 값 무시)
+- `SUBWAY` / `BUS` / `TRAIN` → `TransitFareRegistry`가 국가·거리 기반으로 **강제 재계산**
+- `CAR` / `ETC` → AI 추정값 유지(주차·톨비 등은 규칙화가 어려움)
+
+국가별 요금은 **전략 패턴**으로 분리했다. `TransitFareCalculator` 인터페이스를 두고
+`KoreaTransitFareCalculator`, `JapanTransitFareCalculator`를 구현, `TransitFareRegistry`가
+국가코드로 적절한 계산기를 선택한다. 일본은 도쿄메트로/JR의 **거리 구간별 엔화 요금 × 환율**로
+근사 계산한다.
+
+**장점**
+- 비용 신뢰도가 회복됐고, 새 국가를 추가할 때 계산기 클래스 하나만 더 만들면 된다(OCP).
+
+**트레이드오프 / 남은 한계**
+- 엔/원 환율을 **×9로 고정**해 두어, 환율 급변 시 오차가 생긴다.
+- 거리는 좌표 기반 직선거리(Haversine)라 실제 노선 거리와 차이가 있다.
+
+**보완 방향**
+- 환율을 외부 API로 동적 반영하거나 설정값으로 분리.
+- 이미 Google Routes로 실거리를 받는 경로는 그 값을 우선 사용.
+
+**코드 위치**
+- `domain/ai/service/AiScheduleService.java` `savePlanDay()` (수단별 분기 저장)
+- `domain/plan/fare/TransitFareCalculator.java` (전략 인터페이스)
+- `domain/plan/fare/KoreaTransitFareCalculator.java`, `JapanTransitFareCalculator.java`
+- `domain/plan/fare/TransitFareRegistry.java` (국가별 선택)
+
+**면접 포인트**
+LLM을 쓰되 **"LLM이 잘하는 일과 못하는 일을 구분"**한 사례. 창의적 일정 구성은 AI에게,
+정확해야 하는 수치 계산은 결정론적 코드에게 맡겼다. + 전략 패턴으로 확장성까지 확보.
+
+---
+
+## 4. AI 호출 비용·지연 최적화
+
+**배경**
+Claude API는 호출당 비용·지연이 발생한다. 일정 생성 전 과정을 전부 LLM에 맡기면
+비싸고 느리다.
+
+**결정**
+LLM이 꼭 필요한 부분과 규칙으로 처리 가능한 부분을 나눴다.
+- **규칙 기반**으로 처리: 여행 제목, 렌트카·숙박 스켈레톤 생성, 자연어 입력 파싱.
+- **Claude 호출**: 실제 Day별 상세 일정 생성 등 "창의성·지식"이 필요한 부분만.
+
+**장점**
+- 불필요한 LLM 호출 제거로 **비용·지연 감소.**
+- 규칙 처리 부분은 결과가 결정론적이라 디버깅·테스트가 쉽다.
+
+**트레이드오프**
+- 규칙 코드가 늘어 유지보수 대상이 증가.
+- 규칙과 LLM 결과의 형식을 맞추는 접합부 관리가 필요.
+
+**보완**
+- 일정 생성 정책을 `AiScheduleService` 한 곳에 모아 호출 경계를 명확히 함
+  (전체 일괄 생성 / 단건 재생성 / 빈 시간 채우기로 호출 시나리오를 구분).
+- 모델은 작업 난이도에 맞춰 선택(현재 `claude-sonnet-4-5`)하고, 설정값으로 분리해 교체 가능.
+
+**코드 위치**
+- `domain/ai/service/AiScheduleService.java` (클래스 상단 주석에 호출 정책 명시)
+- `domain/ai/client/ClaudeApiClient.java` (모델·토큰 등 호출 캡슐화)
+- 모델 설정: `application.yml` / `application.properties`의 `claude.model`
+
+**면접 포인트**
+"AI를 쓴다 = 다 AI에 맡긴다"가 아니라, **비용·정확도·속도를 고려해 AI와 규칙의 역할을 분담**한
+설계 감각.
+
+---
+
+## 5. 무거운 점수 계산을 배치(cron)로 분리
+
+**배경**
+맛집 추천 점수는 평점·리뷰수·트렌드를 종합해 계산하는데, 전체 식당을 도는 무거운 작업이다.
+사용자 요청마다 실시간 계산하면 응답이 느려진다.
+
+**결정**
+점수 계산을 **스케줄러 배치**로 분리했다. `@Scheduled(cron = "0 0 3 * * *")`로
+트래픽이 적은 **매일 새벽 3시**에 전체 점수를 재계산해 `RestaurantScore`에 저장하고,
+조회 시에는 저장된 값을 빠르게 내준다.
+
+**장점**
+- 사용자 조회 응답이 빠르다(미리 계산해 둠).
+- 무거운 연산을 한가한 시간대로 이동.
+
+**트레이드오프 / 현재 한계**
+- 점수가 **최대 하루 지난 값**일 수 있다(실시간성 ↓ — 추천에선 허용 가능한 수준).
+- 더 솔직한 한계: 현재 `positiveRatio = 0.75`, `recentTrend = STABLE`이 **하드코딩**이다.
+  코드 주석에도 "실제로는 외부 리뷰 API에서 가져와야 함"이라고 남겨 두었다.
+  → 배치 구조와 점수 공식은 완성됐지만, 입력 데이터는 아직 미완성.
+
+**보완 방향**
+- 외부 리뷰/감성분석 API를 연동해 `positiveRatio`·`recentTrend`를 실제 값으로 채우기.
+- 변경이 있는 식당만 재계산하는 증분 배치로 비용 절감.
+
+**코드 위치**
+- `domain/restaurant/scheduler/RestaurantScoreScheduler.java`
+- `DagalleApplication.java`의 `@EnableScheduling`
+- `domain/restaurant/entity/RestaurantScore.java` (점수 공식)
+
+**면접 포인트**
+"실시간 계산 vs 사전 계산"의 트레이드오프를 판단한 사례. + 미완성 부분을 숨기지 않고
+주석으로 한계와 개선 방향을 남긴 점(정직한 엔지니어링).
+
+---
+
+## 6. 인터페이스 추상화로 구현 교체 가능하게
+
+**배경**
+환경(로컬/운영)이나 대상(국가)이 달라질 때 코드 본문을 고치지 않고 구현만 바꾸고 싶었다.
+
+**결정**
+변하는 부분을 인터페이스 뒤로 숨기는 추상화를 두 곳에 적용했다.
+- `TokenStore` 인터페이스 → `RedisTokenStore`(운영) / `InMemoryTokenStore`(로컬·Redis 미사용).
+- `TransitFareCalculator` 인터페이스 → 국가별 구현 + `TransitFareRegistry`로 선택(3번 참고).
+
+**장점**
+- 운영은 Redis, 로컬은 인메모리로 **인프라 의존 없이 개발** 가능(로컬에선 Redis 자동설정 제외).
+- 새 국가/저장소 추가 시 기존 코드 수정 없이 구현 클래스만 추가(OCP·DIP).
+
+**트레이드오프**
+- 추상화 계층이 늘어 단순 기능 대비 코드량이 증가.
+- 과한 추상화는 오히려 읽기 어렵다 → "정말 바뀌는 축"에만 적용.
+
+**보완**
+- 실제로 교체가 일어나는 축(저장소 환경, 국가)에만 한정 적용해 과설계를 피함.
+
+**코드 위치**
+- `common/token/TokenStore.java` (+ `RedisTokenStore`, `InMemoryTokenStore`)
+- `domain/plan/fare/TransitFareCalculator.java` (+ Registry)
+- 로컬 프로파일 Redis 제외: `application.yml`의 `local` 프로파일 `autoconfigure.exclude`
+
+**면접 포인트**
+디자인 패턴을 "외워서 쓴" 게 아니라, **변동성이 큰 지점을 식별해 거기에만** 전략 패턴·
+의존성 역전을 적용했다는 판단 근거를 설명할 수 있다.
+
+---
+
+## 부록 — 한 줄 요약
+
+| # | 결정 | 핵심 트레이드오프 |
+|---|------|------------------|
+| 1 | JWT 무상태 인증 | 확장성 ↔ 즉시 무효화 불가 → Redis refresh로 보완 |
+| 2 | WebSocket 협업 | 실시간성 ↔ REST 필터 우회 → 채널 인터셉터로 인증 |
+| 3 | 교통비 코드 계산 | AI 편의 ↔ 부정확 → 규칙·전략패턴으로 강제 |
+| 4 | AI/규칙 역할 분담 | 비용·속도 ↔ 규칙 유지보수 |
+| 5 | 점수 배치 계산 | 응답 속도 ↔ 최대 하루 지연 |
+| 6 | 인터페이스 추상화 | 유연성 ↔ 코드량 → 변동 축에만 적용 |

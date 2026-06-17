@@ -571,7 +571,7 @@ export default function TravelPlannerPage() {
           {/* 타임라인 */}
           {dayStatus[selectedDay] === 'done' && currentDay && (
             <div style={{ display: viewMode === 'timeline' ? 'block' : 'none' }}>
-              <PlaceTimeline routes={currentDay.routes} />
+              <PlaceTimeline routes={currentDay.routes} completed={travel.status === 'COMPLETED'} />
               {selectedDay < totalDays && dayStatus[selectedDay + 1] === 'pending' && (
                 <NextDayBanner dayNum={selectedDay + 1} onGenerate={() => setSelectedDay(selectedDay + 1)} />
               )}
@@ -908,7 +908,52 @@ function trafficBuffer(durationMins: number): number {
   return 30
 }
 
-function PlaceTimeline({ routes }: { routes: Route[] }) {
+// 여행 완료 후 식당 별점 — 클릭 시 해당 식당 추천 점수만 즉시 갱신(이벤트 기반)
+function StarRating({ locationId, color }: { locationId: number; color: string }) {
+  const authFetch = useAuthFetch()
+  const [rating, setRating]   = useState(0)
+  const [hover, setHover]     = useState(0)
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
+  const [error, setError]     = useState(false)
+
+  const submit = async (value: number) => {
+    setRating(value); setSaving(true); setSaved(false); setError(false)
+    try {
+      const res = await authFetch(`/api/v1/restaurants/${locationId}/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: value }),
+      })
+      if (res.ok) setSaved(true)
+      else setError(true)
+    } catch { setError(true) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${color}20` }}>
+      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text2)', marginBottom: 6 }}>
+        이 식당, 다시 갈 만했나요?
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {[1, 2, 3, 4, 5].map(n => (
+          <span key={n}
+            onClick={e => { e.stopPropagation(); if (!saving) submit(n) }}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            style={{ fontSize: '1.4rem', cursor: saving ? 'wait' : 'pointer', lineHeight: 1, color: (hover || rating) >= n ? '#F59E0B' : 'var(--border)', transition: 'color 0.12s', filter: (hover || rating) >= n ? 'none' : 'grayscale(1)' }}
+          >★</span>
+        ))}
+        {saved  && <span style={{ marginLeft: 8, fontSize: '0.72rem', color: '#16A34A', fontWeight: 700 }}>등록됐어요! 추천 점수에 반영됩니다</span>}
+        {error  && <span style={{ marginLeft: 8, fontSize: '0.72rem', color: 'var(--coral)', fontWeight: 700 }}>잠시 후 다시 시도해주세요</span>}
+        {saving && <span style={{ marginLeft: 8, fontSize: '0.72rem', color: 'var(--text3)' }}>저장 중…</span>}
+      </div>
+    </div>
+  )
+}
+
+function PlaceTimeline({ routes, completed = false }: { routes: Route[]; completed?: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   if (!routes || routes.length === 0) return null
 
@@ -1064,6 +1109,10 @@ function PlaceTimeline({ routes }: { routes: Route[] }) {
                         )
                       })()}
                     </div>
+
+                    {completed && type === 'RESTAURANT' && place.loc.id != null && (
+                      <StarRating locationId={place.loc.id} color={locColor} />
+                    )}
                   </div>
                 )}
               </div>

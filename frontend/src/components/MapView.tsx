@@ -142,6 +142,14 @@ export default function MapView({ routes, apiKey, highlightDay }: Props) {
         zoom:13, center:{lat:35.6812,lng:139.7671},
         mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
         gestureHandling:'greedy',
+        // 잡다한 POI·라벨을 죽여 경로선이 도드라지게 (가시성)
+        styles:[
+          { featureType:'poi',            elementType:'labels', stylers:[{visibility:'off'}] },
+          { featureType:'poi.business',                          stylers:[{visibility:'off'}] },
+          { featureType:'transit',        elementType:'labels', stylers:[{visibility:'off'}] },
+          { featureType:'road',           elementType:'labels.icon', stylers:[{visibility:'off'}] },
+          { featureType:'administrative', elementType:'labels', stylers:[{lightness:20}] },
+        ],
       })
       setMapReady(true)
       const ro=new ResizeObserver(entries=>{
@@ -254,30 +262,25 @@ export default function MapView({ routes, apiKey, highlightDay }: Props) {
       const handleFallback=()=>{
         if(ac.signal.aborted) return
         renderer.setMap(null)   // DirectionsRenderer 제거하고 직접 그리기
-        // OSRM 폴백 (WALK/CAR) 또는 직선 (TRANSIT 실패 시)
-        if(t==='SUBWAY'||t==='TRAIN'){
-          const pts=[{lat:route.from.lat,lng:route.from.lng},{lat:route.to.lat,lng:route.to.lng}]
-          drawFallbackLine(pts, color, weight, opacity, t, map)
-          infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
-          setRouteInfos([...infos])
-          setLoadingCount(c=>Math.max(0,c-1))
-        } else {
-          fetchOsrm(route.from, route.to, t, ac.signal)
-            .then(pts=>{
-              if(ac.signal.aborted) return
-              drawFallbackLine(pts, color, weight, opacity, t, map)
-              infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
-              setRouteInfos([...infos])
-            })
-            .catch(()=>{
-              if(ac.signal.aborted) return
-              const pts=[{lat:route.from.lat,lng:route.from.lng},{lat:route.to.lat,lng:route.to.lng}]
-              drawFallbackLine(pts, color, weight, opacity, t, map)
-              infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
-              setRouteInfos([...infos])
-            })
-            .finally(()=>{ if(!ac.signal.aborted) setLoadingCount(c=>Math.max(0,c-1)) })
-        }
+        // 구글 실패 → OSRM으로 실제 도로를 따라 그린다.
+        //   · WALK = 보행로 프로필, 그 외(CAR·SUBWAY·BUS·TRAIN) = 도로 프로필로 근사.
+        //   · 철도는 전용 노선 데이터가 없어 도로 근사로 대체(직선보다 자연스러움).
+        //   · OSRM마저 실패할 때만 최후의 직선.
+        fetchOsrm(route.from, route.to, t, ac.signal)
+          .then(pts=>{
+            if(ac.signal.aborted) return
+            drawFallbackLine(pts, color, weight, opacity, t, map)
+            infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
+            setRouteInfos([...infos])
+          })
+          .catch(()=>{
+            if(ac.signal.aborted) return
+            const pts=[{lat:route.from.lat,lng:route.from.lng},{lat:route.to.lat,lng:route.to.lng}]
+            drawFallbackLine(pts, color, weight, opacity, t, map)
+            infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
+            setRouteInfos([...infos])
+          })
+          .finally(()=>{ if(!ac.signal.aborted) setLoadingCount(c=>Math.max(0,c-1)) })
       }
 
       dsvc.route(request, (result, status)=>{

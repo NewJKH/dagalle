@@ -27,6 +27,18 @@ const FEATURES = [
   { icon: '🔄', title: '실시간 동기화', desc: '팀원 모두가 동시에 일정을 보고 수정할 수 있어요. 변경사항이 즉시 반영돼요' },
 ]
 
+// 히어로 자동 슬라이드 배너
+const HERO_SLIDES = [
+  { img: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1800&q=80', city: '도쿄', copy: '네온과 골목의 도시' },
+  { img: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1800&q=80', city: '교토', copy: '천 년의 고요한 산책' },
+  { img: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1800&q=80', city: '제주', copy: '바다와 오름 사이' },
+  { img: 'https://images.unsplash.com/photo-1583400212045-a2bde5b5efba?w=1800&q=80', city: '부산', copy: '바다를 끼고 걷는 여행' },
+]
+
+// 컬러 다양화용 액센트 팔레트 (teal · blue · amber · purple · pink · coral)
+const ACCENTS    = ['#00A896', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899', '#E8715A']
+const ACCENT_BGS = ['#E6F7F4', '#EAF2FE', '#FEF6E7', '#F3EEFE', '#FDEBF4', '#FCEEEA']
+
 const TYPE_ICON: Record<string, string>  = { RESTAURANT:'🍽️', CAFE:'☕', MUSEUM:'🏛️', PARK:'🌿', HOTEL:'🏨', STATION:'🚉', AIRPORT:'✈️', SHOPPING:'🛍️', ETC:'📍' }
 const TRANS_ICON: Record<string, string> = { WALK:'🚶', SUBWAY:'🚇', BUS:'🚌', TRAIN:'🚆', CAR:'🚗' }
 const TRANS_LABEL: Record<string, string> = { WALK:'도보', SUBWAY:'지하철', BUS:'버스', TRAIN:'기차', CAR:'자동차' }
@@ -196,12 +208,19 @@ export default function LandingPage() {
   const [searchTravelers, setSearchTravelers] = useState(2)
   const [showDrop, setShowDrop]         = useState(false)
   const [destTab, setDestTab]           = useState<'ALL'|'JP'|'KR'|'TH'>('ALL')
+  const [heroIdx, setHeroIdx]           = useState(0)
   const destRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fn = (e: MouseEvent) => { if (destRef.current && !destRef.current.contains(e.target as Node)) setShowDrop(false) }
     document.addEventListener('mousedown', fn)
     return () => document.removeEventListener('mousedown', fn)
+  }, [])
+
+  // 히어로 배너 자동 전환 (5초)
+  useEffect(() => {
+    const t = setInterval(() => setHeroIdx(i => (i + 1) % HERO_SLIDES.length), 5000)
+    return () => clearInterval(t)
   }, [])
 
   const filteredCities = ALL_CITIES.filter(c => !searchDest || c.includes(searchDest))
@@ -238,15 +257,23 @@ export default function LandingPage() {
       {/* ══════════════════════════════════════════════
           HERO — 중앙 정렬, 검색바 플로팅 카드
       ══════════════════════════════════════════════ */}
-      <section style={{ position: 'relative', height: '72vh', minHeight: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        {/* 배경 */}
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1800&q=80)', backgroundSize: 'cover', backgroundPosition: 'center 40%' }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.44)' }} />
+      <section style={{ position: 'relative', height: '72vh', minHeight: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {/* 자동 전환 배경 슬라이드 (크로스페이드) */}
+        {HERO_SLIDES.map((s, i) => (
+          <div key={i} style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `url(${s.img})`, backgroundSize: 'cover', backgroundPosition: 'center 40%',
+            opacity: i === heroIdx ? 1 : 0,
+            transform: i === heroIdx ? 'scale(1.05)' : 'scale(1)',
+            transition: 'opacity 1.2s ease, transform 6s ease',
+          }} />
+        ))}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.5) 100%)' }} />
 
         <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', width: '100%', padding: '0 32px' }}>
-          {/* 상단 레이블 */}
-          <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.65)', letterSpacing: '0.2em', marginBottom: 16, textTransform: 'uppercase' }}>
-            AI TRAVEL PLANNER · 다갈래
+          {/* 상단 레이블 — 현재 슬라이드 도시 */}
+          <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.2em', marginBottom: 16, textTransform: 'uppercase' }}>
+            지금 뜨는 여행지 · <span style={{ color: '#fff' }}>{HERO_SLIDES[heroIdx].city}</span> — {HERO_SLIDES[heroIdx].copy}
           </p>
 
           {/* 메인 타이틀 */}
@@ -344,6 +371,17 @@ export default function LandingPage() {
             ))}
           </div>
         </div>
+
+        {/* 슬라이드 인디케이터 */}
+        <div style={{ position: 'absolute', bottom: 22, left: 0, right: 0, zIndex: 2, display: 'flex', gap: 8, justifyContent: 'center' }}>
+          {HERO_SLIDES.map((_, i) => (
+            <button key={i} onClick={() => setHeroIdx(i)} aria-label={`슬라이드 ${i + 1}`}
+              style={{
+                width: i === heroIdx ? 26 : 8, height: 8, borderRadius: 20, border: 'none', cursor: 'pointer',
+                background: i === heroIdx ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'all 0.3s', padding: 0,
+              }} />
+          ))}
+        </div>
       </section>
 
       {/* ══════════════════════════════════════════════
@@ -360,7 +398,7 @@ export default function LandingPage() {
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--gray7)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
             >
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'var(--primary-bg)', border: '1px solid var(--primary-pale)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>{item.icon}</div>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: ACCENT_BGS[i % ACCENT_BGS.length], border: `1px solid ${ACCENTS[i % ACCENTS.length]}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>{item.icon}</div>
               <span style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--text2)', whiteSpace: 'nowrap' }}>{item.label}</span>
             </button>
           ))}
@@ -379,7 +417,7 @@ export default function LandingPage() {
             { num: '30일',    label: '최장 일정 지원' },
           ].map((s, i, arr) => (
             <div key={s.label} style={{ padding: '18px 0', textAlign: 'center', borderRight: i < arr.length - 1 ? '1px solid var(--border-lt)' : 'none' }}>
-              <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>{s.num}</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 900, color: ACCENTS[i % ACCENTS.length], letterSpacing: '-0.02em', lineHeight: 1 }}>{s.num}</div>
               <div style={{ fontSize: '0.68rem', color: 'var(--text3)', marginTop: 4, fontWeight: 500 }}>{s.label}</div>
             </div>
           ))}
@@ -523,9 +561,9 @@ export default function LandingPage() {
 
           {/* 3×2 그리드 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: 'var(--border-lt)', border: '1px solid var(--border-lt)', borderRadius: 12, overflow: 'hidden' }}>
-            {FEATURES.map(f => (
+            {FEATURES.map((f, i) => (
               <div key={f.title} style={{ background: '#fff', padding: '24px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 9, background: 'var(--primary-bg)', border: '1px solid var(--primary-pale)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>{f.icon}</div>
+                <div style={{ width: 40, height: 40, borderRadius: 9, background: ACCENT_BGS[i % ACCENT_BGS.length], border: `1px solid ${ACCENTS[i % ACCENTS.length]}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>{f.icon}</div>
                 <div>
                   <div style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text)', marginBottom: 5 }}>{f.title}</div>
                   <div style={{ fontSize: '0.73rem', color: 'var(--text3)', lineHeight: 1.65 }}>{f.desc}</div>

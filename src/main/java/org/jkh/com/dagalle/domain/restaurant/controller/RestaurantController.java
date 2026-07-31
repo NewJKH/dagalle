@@ -24,12 +24,13 @@ public class RestaurantController {
     private final RestaurantService restaurantService;
 
     @Operation(summary = "근처 맛집 추천",
-            description = "현재 위치(lat, lng)를 기준으로 평점·리뷰 기반 추천 점수가 높은 음식점 최대 10개를 반환합니다.")
+            description = "기준 위치(lat, lng) 반경 내에서 추천 점수가 높은 음식점 최대 10개를 반환합니다. radiusKm 기본값 3km.")
     @GetMapping("/recommend")
     public ApiResponse<List<RestaurantRecommendResponse>> recommend(
             @Parameter(description = "위도 (예: 35.1587)") @RequestParam Double lat,
-            @Parameter(description = "경도 (예: 129.1604)") @RequestParam Double lng) {
-        return ApiResponse.ok(restaurantService.recommend(lat, lng));
+            @Parameter(description = "경도 (예: 129.1604)") @RequestParam Double lng,
+            @Parameter(description = "검색 반경 km (기본 3)") @RequestParam(required = false) Double radiusKm) {
+        return ApiResponse.ok(restaurantService.recommend(lat, lng, radiusKm));
     }
 
     @Operation(summary = "여행 후 식당 별점 등록",

@@ -61,6 +61,28 @@ function decodePolyline(enc: string): google.maps.LatLngLiteral[] {
   }
   return pts
 }
+// 두 지점을 잇는 부드러운 곡선(2차 베지어) 좌표 생성 — 지하철·기차 역↔역 표현용
+function curvePoints(
+  from: google.maps.LatLngLiteral, to: google.maps.LatLngLiteral, segments = 48
+): google.maps.LatLngLiteral[] {
+  const { lat: lat1, lng: lng1 } = from
+  const { lat: lat2, lng: lng2 } = to
+  const mx = (lat1 + lat2) / 2, my = (lng1 + lng2) / 2
+  const dx = lat2 - lat1, dy = lng2 - lng1
+  // 현(chord)에 수직으로 제어점을 띄워 아치 모양을 만든다 (거리의 18%)
+  const cx = mx - dy * 0.18
+  const cy = my + dx * 0.18
+  const pts: google.maps.LatLngLiteral[] = []
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments, u = 1 - t
+    pts.push({
+      lat: u * u * lat1 + 2 * u * t * cx + t * t * lat2,
+      lng: u * u * lng1 + 2 * u * t * cy + t * t * lng2,
+    })
+  }
+  return pts
+}
+
 async function fetchOsrm(
   from:{lat:number;lng:number}, to:{lat:number;lng:number},
   t:string, signal:AbortSignal
@@ -142,6 +164,14 @@ export default function MapView({ routes, apiKey, highlightDay }: Props) {
         zoom:13, center:{lat:35.6812,lng:139.7671},
         mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
         gestureHandling:'greedy',
+        // 잡다한 POI·라벨을 죽여 경로선이 도드라지게 (가시성)
+        styles:[
+          { featureType:'poi',            elementType:'labels', stylers:[{visibility:'off'}] },
+          { featureType:'poi.business',                          stylers:[{visibility:'off'}] },
+          { featureType:'transit',        elementType:'labels', stylers:[{visibility:'off'}] },
+          { featureType:'road',           elementType:'labels.icon', stylers:[{visibility:'off'}] },
+          { featureType:'administrative', elementType:'labels', stylers:[{lightness:20}] },
+        ],
       })
       setMapReady(true)
       const ro=new ResizeObserver(entries=>{
@@ -194,74 +224,63 @@ export default function MapView({ routes, apiKey, highlightDay }: Props) {
       const color   = isDimmed ? '#94A3B8' : tColor
       const weight  = transportFilter ? 8 : 6
 
-      // ── DirectionsRenderer (구글 맵 스타일) ─────────
-      const renderer=new google.maps.DirectionsRenderer({
-        map,
-        suppressMarkers:true,
-        suppressInfoWindows:true,
-        preserveViewport:true,
-        polylineOptions:{
-          strokeColor: color,
-          strokeWeight: weight,
-          strokeOpacity: t==='WALK' ? 0 : opacity,   // 도보는 점선 따로 그림
-          zIndex: isDimmed ? 1 : 5,
-          icons: t==='WALK' ? [{
-            icon:{ path:google.maps.SymbolPath.CIRCLE, scale:3, fillColor:color, fillOpacity:opacity, strokeOpacity:0 } as google.maps.Symbol,
-            offset:'0', repeat:'10px',
-          }] : t==='BUS' ? [{
-            icon:{ path:'M 0,-2 0,2', strokeOpacity:opacity, strokeColor:color, scale:3 } as google.maps.Symbol,
-            offset:'0', repeat:'14px',
-          }] : [{
-            icon:{ path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale:4, strokeColor:'#fff', strokeWeight:1.5, fillColor:color, fillOpacity:opacity } as google.maps.Symbol,
-            repeat:'80px', offset:'50%',
-          }],
-        },
-      })
-      renderers.current.push(renderer)
+      const isTransit = (t==='SUBWAY'||t==='BUS'||t==='TRAIN')
 
-      // DirectionsService 요청
-      const request: google.maps.DirectionsRequest = {
-        origin:      { lat:route.from.lat, lng:route.from.lng },
-        destination: { lat:route.to.lat,   lng:route.to.lng   },
-        travelMode:  getTravelMode(t),
-        ...(getTransitModes(t) ? { transitOptions:{ modes:getTransitModes(t)! } } : {}),
-      }
-
-      const handleSuccess=(result: google.maps.DirectionsResult)=>{
-        if(ac.signal.aborted) return
-        renderer.setDirections(result)
-        const leg=result.routes[0]?.legs[0]
-
-        // 대중교통 환승 정보 추출
-        let via: string|null=null
-        if(leg?.steps){
-          const transitNames=leg.steps
-            .filter(s=>s.travel_mode===google.maps.TravelMode.TRANSIT)
-            .map(s=>s.transit?.line?.short_name??s.transit?.line?.name??(s.transit?.vehicle?.type??''))
-            .filter(Boolean)
-          if(transitNames.length) via=transitNames.join(' → ')
-        }
-
-        infos[idx]={
-          route, duration:leg?.duration?.text??null,
-          distance:leg?.distance?.text??null, via,
-          polylinePts:null, usedDirections:true,
-        }
+      if(isTransit){
+        // 지하철·기차·버스: 실제 노선 데이터가 없으므로 역↔역을 부드러운 점선 곡선으로 표현
+        const pts = curvePoints(
+          { lat:route.from.lat, lng:route.from.lng },
+          { lat:route.to.lat,   lng:route.to.lng   }
+        )
+        drawTransitCurve(pts, color, weight, opacity, map)
+        infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
         setRouteInfos([...infos])
         setLoadingCount(c=>Math.max(0,c-1))
-      }
+      } else {
+        // 도보·자동차: 실제 경로가 의미 있으므로 구글 → OSRM → 직선 순으로 도로를 따라 그린다.
+        const renderer=new google.maps.DirectionsRenderer({
+          map,
+          suppressMarkers:true,
+          suppressInfoWindows:true,
+          preserveViewport:true,
+          polylineOptions:{
+            strokeColor: color,
+            strokeWeight: weight,
+            strokeOpacity: t==='WALK' ? 0 : opacity,   // 도보는 점선 따로 그림
+            zIndex: isDimmed ? 1 : 5,
+            icons: t==='WALK' ? [{
+              icon:{ path:google.maps.SymbolPath.CIRCLE, scale:3, fillColor:color, fillOpacity:opacity, strokeOpacity:0 } as google.maps.Symbol,
+              offset:'0', repeat:'10px',
+            }] : [{
+              icon:{ path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale:4, strokeColor:'#fff', strokeWeight:1.5, fillColor:color, fillOpacity:opacity } as google.maps.Symbol,
+              repeat:'80px', offset:'50%',
+            }],
+          },
+        })
+        renderers.current.push(renderer)
 
-      const handleFallback=()=>{
-        if(ac.signal.aborted) return
-        renderer.setMap(null)   // DirectionsRenderer 제거하고 직접 그리기
-        // OSRM 폴백 (WALK/CAR) 또는 직선 (TRANSIT 실패 시)
-        if(t==='SUBWAY'||t==='TRAIN'){
-          const pts=[{lat:route.from.lat,lng:route.from.lng},{lat:route.to.lat,lng:route.to.lng}]
-          drawFallbackLine(pts, color, weight, opacity, t, map)
-          infos[idx]={route, duration:`약 ${route.durationMinutes??'?'}분`, distance:null, via:null, polylinePts:pts, usedDirections:false}
+        const request: google.maps.DirectionsRequest = {
+          origin:      { lat:route.from.lat, lng:route.from.lng },
+          destination: { lat:route.to.lat,   lng:route.to.lng   },
+          travelMode:  getTravelMode(t),
+        }
+
+        const handleSuccess=(result: google.maps.DirectionsResult)=>{
+          if(ac.signal.aborted) return
+          renderer.setDirections(result)
+          const leg=result.routes[0]?.legs[0]
+          infos[idx]={
+            route, duration:leg?.duration?.text??null,
+            distance:leg?.distance?.text??null, via:null,
+            polylinePts:null, usedDirections:true,
+          }
           setRouteInfos([...infos])
           setLoadingCount(c=>Math.max(0,c-1))
-        } else {
+        }
+
+        const handleFallback=()=>{
+          if(ac.signal.aborted) return
+          renderer.setMap(null)   // DirectionsRenderer 제거하고 직접 그리기
           fetchOsrm(route.from, route.to, t, ac.signal)
             .then(pts=>{
               if(ac.signal.aborted) return
@@ -278,13 +297,13 @@ export default function MapView({ routes, apiKey, highlightDay }: Props) {
             })
             .finally(()=>{ if(!ac.signal.aborted) setLoadingCount(c=>Math.max(0,c-1)) })
         }
-      }
 
-      dsvc.route(request, (result, status)=>{
-        if(ac.signal.aborted) return
-        if(status===google.maps.DirectionsStatus.OK && result) handleSuccess(result)
-        else handleFallback()
-      })
+        dsvc.route(request, (result, status)=>{
+          if(ac.signal.aborted) return
+          if(status===google.maps.DirectionsStatus.OK && result) handleSuccess(result)
+          else handleFallback()
+        })
+      }
 
       // ── 마커 ────────────────────────────────────────
       const fromKey=`${route.day}-${route.from.lat.toFixed(5)}-${route.from.lng.toFixed(5)}`
@@ -357,6 +376,22 @@ export default function MapView({ routes, apiKey, highlightDay }: Props) {
                [{icon:{path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW,scale:4,strokeColor:'#fff',strokeWeight:1.5,fillColor:color,fillOpacity:opacity} as google.maps.Symbol,repeat:'80px',offset:'50%'}],
       })
       poly.setMap(map); polylines.current.push(poly)
+    }
+
+    // 지하철·기차: 역↔역을 부드러운 점선 곡선으로 그린다 (흰 아웃라인으로 가독성 확보)
+    function drawTransitCurve(
+      pts:google.maps.LatLngLiteral[], color:string,
+      weight:number, opacity:number, map:google.maps.Map
+    ) {
+      if(opacity>0.5){
+        const out=new google.maps.Polyline({ path:pts, zIndex:3, strokeColor:'#fff', strokeOpacity:0.9, strokeWeight:weight+4 })
+        out.setMap(map); polylines.current.push(out)
+      }
+      const dash=new google.maps.Polyline({
+        path:pts, zIndex:4, strokeColor:color, strokeOpacity:0, strokeWeight:weight,
+        icons:[{ icon:{ path:'M 0,-1 0,1', strokeColor:color, strokeOpacity:opacity, strokeWeight:weight, scale:2 } as google.maps.Symbol, offset:'0', repeat:'16px' }],
+      })
+      dash.setMap(map); polylines.current.push(dash)
     }
 
     return ()=>{ ac.abort() }

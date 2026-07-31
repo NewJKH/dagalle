@@ -6,12 +6,14 @@ import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
+import org.jkh.com.dagalle.domain.plan.repository.PlanRouteRepository;
 import org.jkh.com.dagalle.domain.restaurant.dto.RestaurantRecommendResponse;
 import org.jkh.com.dagalle.domain.restaurant.entity.RestaurantReview;
 import org.jkh.com.dagalle.domain.restaurant.entity.RestaurantScore;
 import org.jkh.com.dagalle.domain.restaurant.entity.ReviewTrend;
 import org.jkh.com.dagalle.domain.restaurant.repository.RestaurantReviewRepository;
 import org.jkh.com.dagalle.domain.restaurant.repository.RestaurantScoreRepository;
+import org.jkh.com.dagalle.domain.travel.entity.TravelStatus;
 import org.jkh.com.dagalle.domain.user.entity.User;
 import org.jkh.com.dagalle.domain.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -28,11 +30,14 @@ public class RestaurantService {
     private final RestaurantReviewRepository restaurantReviewRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
+    private final PlanRouteRepository planRouteRepository;
 
+    /** 기준 좌표 반경 내 추천 식당 (기본 3km, 최대 10곳) */
     @Transactional(readOnly = true)
-    public List<RestaurantRecommendResponse> recommend(Double lat, Double lng) {
-        return restaurantScoreRepository.findTopNearby(lat, lng, 10).stream()
-                .map(RestaurantRecommendResponse::from)
+    public List<RestaurantRecommendResponse> recommend(Double lat, Double lng, Double radiusKm) {
+        double radius = (radiusKm != null && radiusKm > 0) ? radiusKm : 3.0;
+        return restaurantScoreRepository.findTopNearby(lat, lng, radius, 10).stream()
+                .map(score -> RestaurantRecommendResponse.from(score, lat, lng))
                 .toList();
     }
 
@@ -48,6 +53,11 @@ public class RestaurantService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         Location location = locationRepository.findById(locationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_NOT_FOUND));
+
+        // 0) 다녀온 곳만 평가 가능 — 완료된 내 여행 일정에 포함된 장소인지 검증
+        if (!planRouteRepository.existsVisitedByUser(user, location, TravelStatus.COMPLETED)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
 
         // 1) 별점 upsert (사용자-식당 1건)
         restaurantReviewRepository.findByUserAndLocation(user, location)

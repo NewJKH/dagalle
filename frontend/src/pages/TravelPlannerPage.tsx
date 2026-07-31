@@ -953,6 +953,85 @@ function StarRating({ locationId, color }: { locationId: number; color: string }
   )
 }
 
+// 이 장소 근처 맛집 추천 — 배치/별점으로 쌓인 recommendScore를 실제로 보여주는 화면
+interface NearbyRestaurant {
+  locationId: number
+  name: string
+  address?: string | null
+  rating?: number | null
+  recommendScore?: number | null
+  isOpenNow?: boolean | null
+  distanceKm?: number | null
+}
+
+function NearbyRestaurants({ lat, lng, color }: { lat: number; lng: number; color: string }) {
+  const authFetch = useAuthFetch()
+  const [items, setItems]     = useState<NearbyRestaurant[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState(false)
+
+  const load = async () => {
+    setLoading(true); setError(false)
+    try {
+      const res = await authFetch(`/api/v1/restaurants/recommend?lat=${lat}&lng=${lng}&radiusKm=3`)
+      const data = await res.json()
+      setItems(res.ok && Array.isArray(data?.data) ? data.data : [])
+    } catch { setError(true) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [lat, lng])
+
+  if (loading) return <div style={{ marginTop: 12, fontSize: '0.72rem', color: 'var(--text3)' }}>근처 맛집 찾는 중…</div>
+  if (error)   return <div style={{ marginTop: 12, fontSize: '0.72rem', color: 'var(--coral)' }}>맛집 정보를 불러오지 못했어요</div>
+  if (!items || items.length === 0) {
+    return (
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${color}20` }}>
+        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text2)', marginBottom: 4 }}>🍽️ 이 근처 맛집</div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--text3)', lineHeight: 1.6 }}>
+          아직 평가된 맛집이 없어요. 여행을 마치고 별점을 남기면 여기에 쌓입니다.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${color}20` }}>
+      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>
+        🍽️ 이 근처 맛집 <span style={{ color: 'var(--text3)', fontWeight: 500 }}>· 반경 3km</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.slice(0, 5).map(r => (
+          <div key={r.locationId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#fff', border: '1px solid var(--border-lt)', borderRadius: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {r.name}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+                {r.rating != null && r.rating > 0 && (
+                  <span style={{ fontSize: '0.66rem', color: '#F59E0B', fontWeight: 700 }}>★ {r.rating.toFixed(1)}</span>
+                )}
+                {r.distanceKm != null && (
+                  <span style={{ fontSize: '0.66rem', color: 'var(--text3)' }}>{r.distanceKm}km</span>
+                )}
+                {r.isOpenNow === true && (
+                  <span style={{ fontSize: '0.62rem', color: '#16A34A', fontWeight: 700 }}>영업중</span>
+                )}
+              </div>
+            </div>
+            {r.recommendScore != null && (
+              <div style={{ flexShrink: 0, textAlign: 'center', minWidth: 42 }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 900, color, lineHeight: 1 }}>{r.recommendScore}</div>
+                <div style={{ fontSize: '0.58rem', color: 'var(--text3)', marginTop: 1 }}>추천점수</div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function PlaceTimeline({ routes, completed = false }: { routes: Route[]; completed?: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   if (!routes || routes.length === 0) return null
@@ -1113,6 +1192,8 @@ function PlaceTimeline({ routes, completed = false }: { routes: Route[]; complet
                     {completed && type === 'RESTAURANT' && place.loc.id != null && (
                       <StarRating locationId={place.loc.id} color={locColor} />
                     )}
+
+                    <NearbyRestaurants lat={place.loc.lat} lng={place.loc.lng} color={locColor} />
                   </div>
                 )}
               </div>

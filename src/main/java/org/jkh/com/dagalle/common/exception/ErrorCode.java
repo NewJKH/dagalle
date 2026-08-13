@@ -50,7 +50,11 @@ public enum ErrorCode {
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS", "요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
 
     // AI
-    AI_CREDIT_EXHAUSTED(HttpStatus.SERVICE_UNAVAILABLE, "AI_CREDIT_EXHAUSTED", "AI 크레딧이 소진되었습니다. 관리자에게 문의해주세요.");
+    AI_CREDIT_EXHAUSTED(HttpStatus.SERVICE_UNAVAILABLE, "AI_CREDIT_EXHAUSTED", "AI 크레딧이 소진되었습니다. 관리자에게 문의해주세요."),
+
+    // Country — 기본값을 두지 않는다. 국가를 빠뜨린 코드가 조용히 일본으로 동작하면 버그가 숨는다.
+    COUNTRY_REQUIRED(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "여행 국가가 지정되지 않았습니다"),
+    UNSUPPORTED_COUNTRY(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "아직 지원하지 않는 국가입니다");
 
     private final HttpStatus status;
     private final String code;

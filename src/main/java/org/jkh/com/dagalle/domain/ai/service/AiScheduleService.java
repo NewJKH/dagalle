@@ -34,6 +34,8 @@ import org.jkh.com.dagalle.domain.travel.repository.TravelPlanRepository;
 import org.jkh.com.dagalle.domain.user.entity.Tendency;
 import org.jkh.com.dagalle.domain.user.entity.User;
 import org.jkh.com.dagalle.domain.user.repository.UserRepository;
+import org.jkh.com.dagalle.common.country.AiPromptRule;
+import org.jkh.com.dagalle.common.country.CountryProfileRegistry;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -81,6 +83,12 @@ public class AiScheduleService {
     private final ObjectMapper objectMapper;
     private final GooglePlacesClient googlePlacesClient;
     private final TransitFareRegistry transitFareRegistry;
+    private final CountryProfileRegistry countryProfileRegistry;
+
+    /** 국가별 프롬프트 어휘. 이 메서드를 거치면 국가 분기가 호출부에 남지 않는다. */
+    private AiPromptRule promptRule(String countryCode) {
+        return countryProfileRegistry.require(countryCode).aiPromptRule();
+    }
 
     // ──────────────────────────────────────────────
     //  Day 전체 스키마 (단일 Claude 호출용)
@@ -305,11 +313,11 @@ public class AiScheduleService {
     private String buildModifySystemPrompt(String countryCode,
                                            int foodScore, int accommodationScore,
                                            int extremeScore, int transportScore) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        AiPromptRule rule = promptRule(countryCode);
         return "JSON만 응답. 마크다운 금지.\n스키마: " + DAY_SCHEMA + "\n" +
                 "【실존 장소만】Google Maps 실제 검색되는 공식 명칭만 사용. 만들어낸 골목·거리 이름 절대 금지. 확신 없는 장소는 유명한 다른 장소로 대체.\n" +
-                "【장소명 형식】한국어/발음 먼저, 괄호 안에 현지어. 예: '스프카레 가라쿠 (スープカレーGARAKU)'. 영어 브랜드명은 그대로.\n" +
-                (isJp ? "CAR비용=엔×9원." : "원화.") + "\n" +
+                "【장소명 형식】" + rule.placeNamingGuide() + "\n" +
+                rule.costGuide() + "\n" +
                 "【공항·렌트카 이동 규칙 — 수정 시에도 유지】\n" +
                 "- 공항↔도시 이동: 반드시 TRAIN 또는 BUS. CAR 사용 절대 금지.\n" +
                 "- 렌트카 허브-앤-스포크: 호텔(CAR) → 관광지구 주차장(ETC) → 관광지들(WALK) → 주차장(WALK) → 호텔(CAR).\n" +
@@ -797,7 +805,7 @@ public class AiScheduleService {
     private String buildAllDaysSystemPrompt(String countryCode,
                                              int foodScore, int accommodationScore,
                                              int extremeScore, int transportScore) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        AiPromptRule rule = promptRule(countryCode);
 
         String base = "JSON 배열만 응답. 마크다운 금지.\n" +
                 "스키마(배열): [" + DAY_SCHEMA + "]\n" +
@@ -810,9 +818,7 @@ public class AiScheduleService {
                 "5. 주소(address)는 실제 일본어/한국어 공식 주소 형식으로 기재. 없으면 빈 문자열.\n" +
                 "6. 좌표(lat/lng)는 해당 장소의 실제 Google Maps 좌표. 대략적인 지역 중심 좌표 금지.\n" +
                 "검증 기준: '이 장소가 구글 지도에서 검색되는가?' — YES면 포함, NO면 제외.\n" +
-                (isJp
-                    ? "일본 실제 좌표·공식 장소명 기준. CAR 비용=엔화×9원. 고속도로 톨비 포함."
-                    : "한국 실제 좌표·공식 장소명 기준. 원화 요금.") +
+                rule.costGuide() +
                 " 하루 4~6개 route.\n" +
                 "【장소 다양성】\n" +
                 "관광지·사찰만 나열 금지. 하루 대표 관광지 최대 1~2곳, 나머지는 아래 실존 로컬 장소로:\n" +
@@ -825,14 +831,8 @@ public class AiScheduleService {
                 "하루 일정에 박물관·신사·성만 나열 금지.\n" +
                 "교통: WALK=1km이하/도보15분이내, CAR=3km초과 지역간 이동, BUS/TRAIN=도시간·공항이동. WALK 하루 최소1구간.\n" +
                 "【공항 이동 — 절대 규칙】\n" +
-                (isJp
-                    ? "- 일본 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
-                      "  * 나리타→도쿄: 나리타 익스프레스(NEX) TRAIN 60분. * 간사이→오사카: 하루카 특급 TRAIN 75분.\n" +
-                      "  * 후쿠오카 공항→하카타역: 지하철(SUBWAY) 5분. * 삿포로→신치토세: JR 특급 TRAIN 40분.\n" +
-                      "  * 그 외 공항: 리무진버스(BUS) 40~90분.\n"
-                    : "- 한국 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
-                      "  * 인천공항→서울: 공항철도(AREX) TRAIN 45분 또는 공항리무진버스 BUS 60분.\n" +
-                      "  * 김포공항→도심: 지하철(SUBWAY) 30분. * 제주공항→시내: 버스(BUS) 30분.\n") +
+                "- 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
+                rule.airportTransferGuide() +
                 "【렌트카 운행 패턴 — withCar=true일 때만 적용】\n" +
                 "- Day1: 공항 도착 → TRAIN/BUS로 도시 이동 → 도시 내 렌트카 영업소 또는 다음날 아침 픽업.\n" +
                 "  (공항에서 바로 렌트카 픽업 후 고속도로 이동은 허용, 단 공항→도시 자체는 공항까지 포함된 고속도로 경로로 처리)\n" +
@@ -955,7 +955,7 @@ public class AiScheduleService {
     private String buildDaySystemPrompt(String countryCode,
                                         int foodScore, int accommodationScore,
                                         int extremeScore, int transportScore) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        AiPromptRule rule = promptRule(countryCode);
 
         String base = "JSON만 응답. 마크다운 금지.\n스키마: " + DAY_SCHEMA + "\n" +
                 "【★ 최최우선 규칙: 사용자 요청(userWish) ★】\n" +
@@ -970,9 +970,7 @@ public class AiScheduleService {
                 "3. 확신 없는 장소는 제외. 그 지역의 확실히 유명한 장소로 대체.\n" +
                 "4. 레스토랑·카페는 구글·식베로그 4.0+ 실제 영업 중인 곳만.\n" +
                 "5. 좌표는 Google Maps 실제 좌표. 지역 중심 좌표 금지.\n" +
-                (isJp
-                    ? "일본 공식 장소명. CAR비용=엔×9원. 고속도로 톨비 포함."
-                    : "한국 공식 장소명. 원화 기준.") +
+                rule.costGuide() +
                 " 4~6 route.\n" +
                 "【장소 다양성】관광지 최대 1~2곳, 나머지는 로컬 실존 장소:\n" +
                 "- 공식 명칭 있는 먹거리 거리: 유노츠보 카이도, 쿠로몬이치바, 아메요코, 니시키이치바, 나카미세도리\n" +
@@ -983,12 +981,8 @@ public class AiScheduleService {
                 "박물관·신사·성만 나열 금지.\n" +
                 "교통: WALK=1km이하/15분이내, CAR=3km초과 지역간 이동, BUS/TRAIN=도시간·공항이동. WALK 최소1구간.\n" +
                 "【공항 이동 — 절대 규칙】\n" +
-                (isJp
-                    ? "- 일본 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
-                      "  나리타→도쿄: NEX TRAIN 60분. 간사이→오사카: 하루카 TRAIN 75분.\n" +
-                      "  후쿠오카 공항→하카타역: 지하철 SUBWAY 5분. 삿포로↔신치토세: JR TRAIN 40분.\n"
-                    : "- 한국 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
-                      "  인천공항→서울: 공항철도 TRAIN 45분 또는 버스 BUS 60분. 김포공항→도심: SUBWAY 30분.\n") +
+                "- 공항↔도시 이동은 반드시 TRAIN 또는 BUS. CAR 절대 금지.\n" +
+                rule.airportTransferGuide() +
                 "【렌트카 운행 패턴 — withCar=true일 때만】\n" +
                 "- 허브-앤-스포크: 호텔(CAR) → 관광지구 주차장(ETC) → 관광지들(WALK) → 주차장(WALK) → 다음 지구(CAR) → 호텔(CAR).\n" +
                 "- 관광지구 내부 500m 이내 이동은 WALK만. 같은 구역에서 CAR 금지.\n" +
@@ -1126,20 +1120,20 @@ public class AiScheduleService {
 
     private String buildPrefSystemRules(String countryCode, int food, int accommodation,
                                         int extreme, int transport) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
+        AiPromptRule rule = promptRule(countryCode);
         StringBuilder sb = new StringBuilder("\n\n【선호도 강제 규칙 - 위반 금지】");
 
         // 음식
         if (food >= 9) {
             sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE 하루 3곳이상. ")
-              .append(isJp ? "미슐랭·식베로그 고평점 맛집만. 편의점·체인점 금지." : "유명맛집만. 프랜차이즈 금지.");
+              .append(rule.diningHighEnd());
         } else if (food >= 7) {
             sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE 하루 2곳이상. 현지맛집 중심.");
         } else if (food >= 4) {
             sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE 하루 1~2곳. 무난한 현지식당.");
         } else if (food >= 2) {
             sb.append("\n▶음식(").append(food).append("/10): 식사 최소화. RESTAURANT 하루 최대1곳. ")
-              .append(isJp ? "저렴한 정식집·편의점 OK." : "저렴한 식당 OK.");
+              .append(rule.diningBudget());
         } else {
             sb.append("\n▶음식(").append(food).append("/10): RESTAURANT/CAFE route 생성 금지. 편의점 이용 가정.");
         }
@@ -1147,10 +1141,10 @@ public class AiScheduleService {
         // 숙박 (동선 내 호텔 이동 route에 적용)
         if (accommodation >= 8) {
             sb.append("\n▶숙박(").append(accommodation).append("/10): ")
-              .append(isJp ? "료칸·5성급 호텔만. 비즈니스호텔 언급 금지." : "고급리조트·5성급만.");
+              .append(rule.stayLuxury());
         } else if (accommodation <= 2) {
             sb.append("\n▶숙박(").append(accommodation).append("/10): ")
-              .append(isJp ? "게스트하우스·캡슐호텔만. 고급호텔 언급 금지." : "게스트하우스·모텔만.");
+              .append(rule.stayBudget());
         }
 
         // 액티비티
@@ -1163,7 +1157,7 @@ public class AiScheduleService {
         // 이동
         if (transport >= 8) {
             sb.append("\n▶이동(").append(transport).append("/10): ")
-              .append(isJp ? "신칸센·특급열차·페리 등 경치좋은 이동 route 포함." : "KTX·관광열차·페리 포함.");
+              .append(rule.scenicTransport());
         } else if (transport <= 2) {
             sb.append("\n▶이동(").append(transport).append("/10): 하루 총이동 90분이하. 한구역(2km이내) 집중.")
               .append(" 먼거리 이동 route 금지.");
@@ -1497,20 +1491,7 @@ public class AiScheduleService {
     }
 
     private String getAccommodationTypeLabel(String countryCode, int score) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
-        if (isJp) {
-            if      (score >= 9) return "최고급 료칸·5성급";
-            else if (score >= 7) return "고급 호텔·부티크 료칸";
-            else if (score >= 4) return "비즈니스 호텔";
-            else if (score >= 2) return "저가 비즈니스·게스트하우스";
-            else                 return "캡슐호텔·도미토리";
-        } else {
-            if      (score >= 9) return "최고급 호텔·리조트";
-            else if (score >= 7) return "고급 호텔";
-            else if (score >= 4) return "일반 호텔";
-            else if (score >= 2) return "모텔·게스트하우스";
-            else                 return "저가 게스트하우스·도미토리";
-        }
+        return promptRule(countryCode).accommodationLabel(score);
     }
 
     private boolean containsAny(String input, String... keywords) {

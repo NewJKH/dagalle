@@ -476,87 +476,39 @@ public class AiScheduleService {
      *   고급형(acc≥8) → 그랜저 / 제네시스 GV80                      160,000원/일
      */
     private void saveRentalCarByRule(TravelPlan travel, String countryCode, int totalDays) {
-        boolean isJp    = "JP".equalsIgnoreCase(countryCode);
-        int members     = travel.getMemberCount() != null ? travel.getMemberCount() : 2;
-        int accScore    = travel.getAccommodationScore();
-        boolean luxury  = accScore >= 8;
+        int members  = travel.getMemberCount() != null ? travel.getMemberCount() : 2;
+        int accScore = travel.getAccommodationScore();
 
-        String carType;
-        int dailyRate, fuelPerDay, tollPerDay;
+        var tier = countryProfileRegistry.require(countryCode)
+                .costBaseline()
+                .rental(members, accScore);
 
-        if (isJp) {
-            fuelPerDay = 18_000;
-            tollPerDay =  5_000;
-            if (luxury) {
-                carType   = "토요타 알파드 / 렉서스 NX (프리미엄)";
-                dailyRate = 180_000;
-            } else if (members >= 5) {
-                carType   = "토요타 시에나 / 혼다 스텝왜건 (미니밴)";
-                dailyRate = 130_000;
-            } else if (members >= 3) {
-                carType   = "토요타 프리우스 / 닛산 노트 (준중형 하이브리드)";
-                dailyRate = 90_000;
-            } else if (accScore >= 5) {
-                carType   = "토요타 아쿠아 / 혼다 핏 (소형 하이브리드)";
-                dailyRate = 70_000;
-            } else {
-                carType   = "다이하츠 무브 / 스즈키 허슬러 (경차)";
-                dailyRate = 50_000;
-            }
-        } else {
-            fuelPerDay = 30_000;
-            tollPerDay = 10_000;
-            if (luxury) {
-                carType   = "그랜저 / 제네시스 GV80 (프리미엄)";
-                dailyRate = 160_000;
-            } else if (members >= 5) {
-                carType   = "카니발 / 팰리세이드 (대형 SUV·미니밴)";
-                dailyRate = 120_000;
-            } else if (members >= 3) {
-                carType   = "쏘나타 / K5 / 투싼 (중형·소형 SUV)";
-                dailyRate = 80_000;
-            } else if (accScore >= 5) {
-                carType   = "아반떼 / K3 (소형 세단)";
-                dailyRate = 55_000;
-            } else {
-                carType   = "모닝 / 스파크 (경차)";
-                dailyRate = 35_000;
-            }
+        // 렌터카를 쓸 수 없는 나라(베트남 등)는 빈 값을 준다 — 국가를 따지지 않고 결과만 본다.
+        if (tier.isEmpty()) {
+            log.info("[규칙] {} 는 렌터카 미지원 — 저장 생략", countryCode);
+            return;
         }
 
+        var rental = tier.get();
         carRentalRepository.save(CarRental.builder()
                 .travelPlan(travel)
-                .carType(carType)
-                .dailyRateKrw(dailyRate)
+                .carType(rental.carType())
+                .dailyRateKrw(rental.dailyRateKrw())
                 .rentalDays(totalDays)
-                .estimatedFuelKrw(fuelPerDay * totalDays)
-                .estimatedTollKrw(tollPerDay * totalDays)
+                .estimatedFuelKrw(rental.fuelPerDayKrw() * totalDays)
+                .estimatedTollKrw(rental.tollPerDayKrw() * totalDays)
                 .build());
         log.info("[규칙] 렌트카 추천: {} {}원/일 × {}일 ({}명, acc={})",
-                carType, dailyRate, totalDays, members, accScore);
+                rental.carType(), rental.dailyRateKrw(), totalDays, members, accScore);
     }
 
     /** 숙박 등급 → 단가 규칙 테이블 (Claude 없이 저장) */
     private void saveAccommodationByRule(TravelPlan travel, String countryCode,
                                          int accScore, LocalDate checkIn, LocalDate checkOut,
                                          String location) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
-        int pricePerNight;
-        String type;
-
-        if (isJp) {
-            if      (accScore >= 9) { pricePerNight = 270_000; type = "최고급 료칸/5성급 호텔"; }
-            else if (accScore >= 7) { pricePerNight = 180_000; type = "고급 호텔/부티크 료칸"; }
-            else if (accScore >= 4) { pricePerNight = 110_000; type = "비즈니스 호텔"; }
-            else if (accScore >= 2) { pricePerNight =  54_000; type = "저가 비즈니스/게스트하우스"; }
-            else                    { pricePerNight =  27_000; type = "캡슐호텔/도미토리"; }
-        } else {
-            if      (accScore >= 9) { pricePerNight = 350_000; type = "최고급 호텔/리조트"; }
-            else if (accScore >= 7) { pricePerNight = 200_000; type = "고급 호텔"; }
-            else if (accScore >= 4) { pricePerNight = 120_000; type = "일반 호텔"; }
-            else if (accScore >= 2) { pricePerNight =  60_000; type = "모텔/게스트하우스"; }
-            else                    { pricePerNight =  30_000; type = "저가 게스트하우스/도미토리"; }
-        }
+        var tier = countryProfileRegistry.require(countryCode).costBaseline().accommodation(accScore);
+        int pricePerNight = tier.pricePerNightKrw();
+        String type = tier.label();
 
         accommodationRepository.save(Accommodation.builder()
                 .travelPlan(travel)
@@ -577,23 +529,9 @@ public class AiScheduleService {
     private void saveAccommodationPerNight(TravelPlan travel, String countryCode,
                                            int accScore, LocalDate startDate, LocalDate endDate,
                                            String location) {
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
-        int pricePerNight;
-        String type;
-
-        if (isJp) {
-            if      (accScore >= 9) { pricePerNight = 270_000; type = "최고급 료칸/5성급"; }
-            else if (accScore >= 7) { pricePerNight = 180_000; type = "고급 호텔/부티크 료칸"; }
-            else if (accScore >= 4) { pricePerNight = 110_000; type = "비즈니스 호텔"; }
-            else if (accScore >= 2) { pricePerNight =  54_000; type = "게스트하우스"; }
-            else                    { pricePerNight =  27_000; type = "캡슐호텔"; }
-        } else {
-            if      (accScore >= 9) { pricePerNight = 350_000; type = "최고급 호텔/리조트"; }
-            else if (accScore >= 7) { pricePerNight = 200_000; type = "고급 호텔"; }
-            else if (accScore >= 4) { pricePerNight = 120_000; type = "일반 호텔"; }
-            else if (accScore >= 2) { pricePerNight =  60_000; type = "모텔/게스트하우스"; }
-            else                    { pricePerNight =  30_000; type = "저가 게스트하우스"; }
-        }
+        var tier = countryProfileRegistry.require(countryCode).costBaseline().accommodation(accScore);
+        int pricePerNight = tier.pricePerNightKrw();
+        String type = tier.label();
 
         // startDate 부터 endDate 전날까지 1박씩 저장
         LocalDate night = startDate;
@@ -1544,7 +1482,6 @@ public class AiScheduleService {
     private String buildFallbackDayJson(String destination, String countryCode, int dayNumber, LocalDate date) {
         log.warn("[Fallback] 하드코딩 일정 반환: dest={}, day={}", destination, dayNumber);
         String d = date.toString();
-        boolean isJp = "JP".equalsIgnoreCase(countryCode);
 
         // 도쿄
         if (destination != null && (destination.contains("도쿄") || destination.contains("Tokyo"))) {
@@ -1678,22 +1615,22 @@ public class AiScheduleService {
                 ]}""".formatted(dayNumber, d);
         }
 
-        // 기본 fallback (여행지 불명)
-        if (isJp) {
-            return """
-                {"dayNumber":%d,"date":"%s","routes":[
-                  {"fromLocation":{"name":"호텔","address":"Japan","lat":35.6762,"lng":139.6503,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"지역 관광지","address":"Japan","lat":35.6762,"lng":139.6503,"type":"ETC","description":"지역 유명 관광지"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":500,"note":"도보 이동"},
-                  {"fromLocation":{"name":"지역 관광지","address":"Japan","lat":35.6762,"lng":139.6503,"type":"ETC","description":"지역 유명 관광지"},"toLocation":{"name":"지역 맛집","address":"Japan","lat":35.6762,"lng":139.6503,"type":"RESTAURANT","description":"지역 맛집"},"transport":"WALK","departureTime":"12:00","durationMinutes":30,"estimatedCost":1500,"note":"점심 식사"},
-                  {"fromLocation":{"name":"지역 맛집","address":"Japan","lat":35.6762,"lng":139.6503,"type":"RESTAURANT","description":"지역 맛집"},"toLocation":{"name":"호텔","address":"Japan","lat":35.6762,"lng":139.6503,"type":"HOTEL","description":"숙박지"},"transport":"WALK","departureTime":"19:00","durationMinutes":20,"estimatedCost":200,"note":"저녁 복귀"}
-                ]}""".formatted(dayNumber, d);
-        } else {
-            return """
-                {"dayNumber":%d,"date":"%s","routes":[
-                  {"fromLocation":{"name":"호텔","address":"Korea","lat":37.5665,"lng":126.9780,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"지역 관광지","address":"Korea","lat":37.5665,"lng":126.9780,"type":"ETC","description":"지역 유명 관광지"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":5000,"note":"도보 이동"},
-                  {"fromLocation":{"name":"지역 관광지","address":"Korea","lat":37.5665,"lng":126.9780,"type":"ETC","description":"지역 유명 관광지"},"toLocation":{"name":"지역 맛집","address":"Korea","lat":37.5665,"lng":126.9780,"type":"RESTAURANT","description":"지역 맛집"},"transport":"WALK","departureTime":"12:00","durationMinutes":30,"estimatedCost":12000,"note":"점심 식사"},
-                  {"fromLocation":{"name":"지역 맛집","address":"Korea","lat":37.5665,"lng":126.9780,"type":"RESTAURANT","description":"지역 맛집"},"toLocation":{"name":"호텔","address":"Korea","lat":37.5665,"lng":126.9780,"type":"HOTEL","description":"숙박지"},"transport":"WALK","departureTime":"19:00","durationMinutes":20,"estimatedCost":1500,"note":"저녁 복귀"}
-                ]}""".formatted(dayNumber, d);
-        }
+        // 기본 fallback (여행지 불명) — 국가별 샘플은 프로파일이 갖고 있다.
+        //
+        // 여기서 require()를 쓰면 안 된다. 이 메서드는 Claude 호출이 실패했을 때 catch에서
+        // 불리는 최후 방어선이라, 국가를 몰라도 무언가는 돌려줘야 한다.
+        // 예외를 던지면 폴백이 폴백을 못 하게 된다.
+        return countryProfileRegistry.find(countryCode)
+                .map(p -> p.aiPromptRule().genericFallbackDayJson(dayNumber, d))
+                .orElseGet(() -> neutralFallbackDayJson(dayNumber, d));
+    }
+
+    /** 국가조차 알 수 없을 때의 최소 일정. 좌표 없이 시간표만 준다. */
+    private String neutralFallbackDayJson(int dayNumber, String date) {
+        return """
+            {"dayNumber":%d,"date":"%s","routes":[
+              {"fromLocation":{"name":"숙소","address":"","lat":0.0,"lng":0.0,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"인근 관광지","address":"","lat":0.0,"lng":0.0,"type":"ETC","description":"일정을 다시 생성해 주세요"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":0,"note":"자동 생성 실패 — 재생성이 필요합니다"}
+            ]}""".formatted(dayNumber, date);
     }
     // ── 하드코딩 fallback 끝 ─────────────────────────────────────────
 

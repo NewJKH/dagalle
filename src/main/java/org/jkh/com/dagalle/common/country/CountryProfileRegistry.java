@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -42,6 +43,20 @@ public class CountryProfileRegistry {
             throw new BusinessException(ErrorCode.UNSUPPORTED_COUNTRY);
         }
         return profile;
+    }
+
+    /**
+     * 예외를 던지지 않는 조회.
+     *
+     * <p><b>폴백 경로에서만 쓴다.</b> AI 호출이 실패해 최소 일정이라도 돌려줘야 하는 자리에서는
+     * 국가를 몰라도 화면이 비지 않아야 한다 — 거기서 {@link #require}가 예외를 던지면
+     * 폴백이 폴백을 못 하게 된다.
+     *
+     * <p>일반 경로에서는 {@link #require}를 쓴다. 기본값으로 조용히 넘어가면 버그가 숨는다.
+     */
+    public Optional<CountryProfile> find(String countryCode) {
+        if (countryCode == null || countryCode.isBlank()) return Optional.empty();
+        return Optional.ofNullable(profiles.get(countryCode.toUpperCase()));
     }
 
     /** 지원 국가 코드 목록. */

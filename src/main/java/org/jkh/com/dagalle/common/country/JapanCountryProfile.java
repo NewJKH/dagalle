@@ -16,10 +16,18 @@ import java.math.RoundingMode;
 public class JapanCountryProfile implements CountryProfile {
 
     private final ExchangeRateProvider exchangeRate;
+    private final CostBaseline costBaseline = new JapanCostBaseline();
+    /** 상태가 없으므로 한 번만 만든다 — 프롬프트 조립마다 호출된다. */
+    private AiPromptRule promptRule;
 
     @Override
     public String countryCode() {
         return "JP";
+    }
+
+    @Override
+    public CostBaseline costBaseline() {
+        return costBaseline;
     }
 
     @Override
@@ -34,7 +42,10 @@ public class JapanCountryProfile implements CountryProfile {
 
     @Override
     public AiPromptRule aiPromptRule() {
-        return new JapanAiPromptRule(exchangeRate);
+        if (promptRule == null) {
+            promptRule = new JapanAiPromptRule(exchangeRate, costBaseline);
+        }
+        return promptRule;
     }
 
     /** 일본 어휘. 료칸·타베로그·신칸센처럼 일본에만 있는 표현을 담는다. */
@@ -42,6 +53,7 @@ public class JapanCountryProfile implements CountryProfile {
     static class JapanAiPromptRule implements AiPromptRule {
 
         private final ExchangeRateProvider exchangeRate;
+        private final CostBaseline costBaseline;
 
         @Override
         public String costGuide() {
@@ -51,13 +63,10 @@ public class JapanCountryProfile implements CountryProfile {
                     + "을 곱해 환산할 것. CAR 비용에는 고속도로 톨비·주차비를 포함한다.";
         }
 
+        /** 등급 명칭은 {@link CostBaseline}이 정본이다 — 프롬프트와 비용이 어긋나지 않게 한 곳에서만 정의한다. */
         @Override
         public String accommodationLabel(int score) {
-            if (score >= 9) return "최고급 료칸·5성급";
-            if (score >= 7) return "고급 호텔·부티크 료칸";
-            if (score >= 4) return "비즈니스 호텔";
-            if (score >= 2) return "저가 비즈니스·게스트하우스";
-            return "캡슐호텔·도미토리";
+            return costBaseline.accommodation(score).label();
         }
 
         @Override
@@ -96,6 +105,16 @@ public class JapanCountryProfile implements CountryProfile {
         public String airportTransferGuide() {
             return "- 나리타→도쿄: NEX TRAIN 60분. 간사이→오사카: 하루카 TRAIN 75분.\n"
                     + "  후쿠오카 공항→하카타역: SUBWAY 5분. 삿포로↔신치토세: JR TRAIN 40분.\n";
+        }
+
+        @Override
+        public String genericFallbackDayJson(int dayNumber, String date) {
+            return """
+                {"dayNumber":%d,"date":"%s","routes":[
+                  {"fromLocation":{"name":"호텔","address":"Japan","lat":35.6762,"lng":139.6503,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"지역 관광지","address":"Japan","lat":35.6762,"lng":139.6503,"type":"ETC","description":"지역 유명 관광지"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":500,"note":"도보 이동"},
+                  {"fromLocation":{"name":"지역 관광지","address":"Japan","lat":35.6762,"lng":139.6503,"type":"ETC","description":"지역 유명 관광지"},"toLocation":{"name":"지역 맛집","address":"Japan","lat":35.6762,"lng":139.6503,"type":"RESTAURANT","description":"지역 맛집"},"transport":"WALK","departureTime":"12:00","durationMinutes":30,"estimatedCost":1500,"note":"점심 식사"},
+                  {"fromLocation":{"name":"지역 맛집","address":"Japan","lat":35.6762,"lng":139.6503,"type":"RESTAURANT","description":"지역 맛집"},"toLocation":{"name":"호텔","address":"Japan","lat":35.6762,"lng":139.6503,"type":"HOTEL","description":"숙박지"},"transport":"WALK","departureTime":"19:00","durationMinutes":20,"estimatedCost":200,"note":"저녁 복귀"}
+                ]}""".formatted(dayNumber, date);
         }
     }
 }

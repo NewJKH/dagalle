@@ -7,8 +7,14 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
+/**
+ * 운영용. StringRedisTemplate을 요구하므로 Redis 자동설정이 살아있어야 한다.
+ *
+ * <p>local·test 프로파일에서는 {@link InMemoryTokenStore}가 대신 선택된다 —
+ * 두 조건을 함께 고쳐야 한다. 한쪽만 바꾸면 빈이 0개거나 2개가 된다.
+ */
 @Component
-@Profile("!local")
+@Profile("!local & !test")
 @RequiredArgsConstructor
 public class RedisTokenStore implements TokenStore {
 

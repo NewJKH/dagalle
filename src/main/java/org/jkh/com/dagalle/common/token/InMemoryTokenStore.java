@@ -8,8 +8,9 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/** Redis 없이 도는 환경용. 로컬 개발과 테스트가 외부 의존 없이 뜨게 한다. */
 @Component
-@Profile("local")
+@Profile({"local", "test"})
 public class InMemoryTokenStore implements TokenStore {
 
     private record Entry(String value, Instant expiresAt) {}

@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
-import org.jkh.com.dagalle.common.websocket.WebSocketEventPublisher;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.repository.LocationRepository;
 import org.jkh.com.dagalle.domain.plan.client.GoogleRoutesClient;
@@ -45,7 +44,6 @@ public class PlanRouteService {
     private final UserRepository userRepository;
     private final GoogleRoutesClient googleRoutesClient;
     private final TransitFareRegistry transitFareRegistry;
-    private final WebSocketEventPublisher publisher;
 
     @Transactional
     public PlanRouteResponse addRoute(Long userId, Long travelId, Integer dayNumber, RouteAddRequest request) {
@@ -86,11 +84,7 @@ public class PlanRouteService {
                 .estimatedCost(estimatedCost)
                 .distanceKm(distanceKm)
                 .build();
-        PlanRouteResponse result = PlanRouteResponse.from(planRouteRepository.save(route));
-
-        // 실시간 브로드캐스트: 일정 추가
-        publishDayUpdate(travelId, day);
-        return result;
+        return PlanRouteResponse.from(planRouteRepository.save(route));
     }
 
     @Transactional
@@ -101,7 +95,6 @@ public class PlanRouteService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         route.update(request.getTransport(), request.getDepartureTime(),
                 request.getDurationMinutes(), request.getEstimatedCost());
-        publishDayUpdate(travelId, day);
     }
 
     @Transactional
@@ -110,7 +103,6 @@ public class PlanRouteService {
         PlanRoute route = planRouteRepository.findByIdAndPlanDay(routeId, day)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ROUTE_NOT_FOUND));
         planRouteRepository.delete(route);
-        publishDayUpdate(travelId, day);
     }
 
     @Transactional
@@ -124,21 +116,6 @@ public class PlanRouteService {
             PlanRoute route = routeMap.get(order.get(i));
             if (route == null) throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
             route.updateSequence(i + 1);
-        }
-        publishDayUpdate(travelId, day);
-    }
-
-    // ── 실시간 브로드캐스트 ────────────────────────────────
-    private void publishDayUpdate(Long travelId, PlanDay day) {
-        try {
-            // 최신 Day를 다시 로드해서 전체 일정 전파
-            planDayRepository.findByTravelPlanAndDayNumber(day.getTravelPlan(), day.getDayNumber())
-                    .ifPresent(fresh -> publisher.publishScheduleUpdate(travelId,
-                            Map.of("type", "DAY_UPDATED",
-                                   "dayNumber", fresh.getDayNumber(),
-                                   "day", PlanDayResponse.from(fresh))));
-        } catch (Exception e) {
-            log.warn("[WS] 일정 업데이트 브로드캐스트 실패: {}", e.getMessage());
         }
     }
 

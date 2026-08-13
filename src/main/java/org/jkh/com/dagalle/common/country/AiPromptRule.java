@@ -45,4 +45,15 @@ public interface AiPromptRule {
      * 공통 규칙("공항 이동에 CAR 금지")은 호출부에 두고, 여기에는 노선 예시만 담는다.
      */
     String airportTransferGuide();
+
+    /**
+     * AI 호출이 실패했을 때 쓸 최소 일정 JSON. 여행지를 특정할 수 없을 때의 기본값이다.
+     *
+     * <p>화면이 비는 것보다 낫다는 판단으로 두는 안전장치다
+     * ({@code technical-decisions.md} 7번의 폴백 사상과 같다).
+     *
+     * @param dayNumber 몇 일차
+     * @param date      ISO 날짜 문자열
+     */
+    String genericFallbackDayJson(int dayNumber, String date);
 }

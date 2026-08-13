@@ -2,6 +2,8 @@ package org.jkh.com.dagalle.domain.rental.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jkh.com.dagalle.common.country.CostBaseline;
+import org.jkh.com.dagalle.common.country.CountryProfileRegistry;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.jkh.com.dagalle.domain.rental.dto.CarRentalRequest;
@@ -27,6 +29,7 @@ public class CarRentalService {
     private final TravelPlanRepository travelPlanRepository;
     private final TravelMemberRepository travelMemberRepository;
     private final UserRepository userRepository;
+    private final CountryProfileRegistry countryProfileRegistry;
 
     @Transactional
     public CarRentalResponse upsert(Long userId, Long travelId, CarRentalRequest request) {
@@ -62,9 +65,11 @@ public class CarRentalService {
         // 구형 carType(차종명 없는 카테고리 값)이면 현재 여행 조건으로 자동 업그레이드
         if (isLegacyCarType(rental.getCarType())) {
             log.info("[렌트카 자동업그레이드] travelId={} oldCarType='{}'", travelId, rental.getCarType());
-            CarTypeInfo info = resolveCarType(travel);
-            rental.update(info.carType(), info.dailyRate(), null, null, null);
-            log.info("[렌트카 자동업그레이드 완료] newCarType='{}' dailyRate={}", info.carType(), info.dailyRate());
+            resolveCarType(travel).ifPresent(info -> {
+                rental.update(info.carType(), info.dailyRateKrw(), null, null, null);
+                log.info("[렌트카 자동업그레이드 완료] newCarType='{}' dailyRate={}",
+                        info.carType(), info.dailyRateKrw());
+            });
         }
 
         return CarRentalResponse.from(rental);
@@ -88,58 +93,19 @@ public class CarRentalService {
         return true;
     }
 
-    /** 차종 이름 + 단가를 담는 간단한 레코드 */
-    private record CarTypeInfo(String carType, int dailyRate) {}
-
     /**
-     * 여행 조건(국가·인원·숙박등급)에 따라 적합한 차종과 일 렌탈료 계산.
-     * AiScheduleService.saveRentalCarByRule()과 동일한 규칙 적용.
+     * 여행 조건(국가·인원·숙박등급)에 맞는 차종과 일 렌탈료.
+     *
+     * <p>표는 {@link CostBaseline}이 갖고 있다 — 예전에는 이 메서드와
+     * {@code AiScheduleService.saveRentalCarByRule()}이 같은 표를 각자 복사해 두고 있었다.
+     * 렌터카를 쓸 수 없는 나라는 빈 값이 온다.
      */
-    private CarTypeInfo resolveCarType(TravelPlan travel) {
-        boolean isJp   = "JP".equalsIgnoreCase(travel.getCountryCode());
-        int members     = travel.getMemberCount() != null ? travel.getMemberCount() : 2;
-        int accScore    = travel.getAccommodationScore();
-        boolean luxury  = accScore >= 8;
-
-        String carType;
-        int dailyRate;
-
-        if (isJp) {
-            if (luxury) {
-                carType   = "토요타 알파드 / 렉서스 NX (프리미엄)";
-                dailyRate = 180_000;
-            } else if (members >= 5) {
-                carType   = "토요타 시에나 / 혼다 스텝왜건 (미니밴)";
-                dailyRate = 130_000;
-            } else if (members >= 3) {
-                carType   = "토요타 프리우스 / 닛산 노트 (준중형 하이브리드)";
-                dailyRate = 90_000;
-            } else if (accScore >= 5) {
-                carType   = "토요타 아쿠아 / 혼다 핏 (소형 하이브리드)";
-                dailyRate = 70_000;
-            } else {
-                carType   = "다이하츠 무브 / 스즈키 허슬러 (경차)";
-                dailyRate = 50_000;
-            }
-        } else {
-            if (luxury) {
-                carType   = "그랜저 / 제네시스 GV80 (프리미엄)";
-                dailyRate = 160_000;
-            } else if (members >= 5) {
-                carType   = "카니발 / 팰리세이드 (대형 SUV·미니밴)";
-                dailyRate = 120_000;
-            } else if (members >= 3) {
-                carType   = "쏘나타 / K5 / 투싼 (중형·소형 SUV)";
-                dailyRate = 80_000;
-            } else if (accScore >= 5) {
-                carType   = "아반떼 / K3 (소형 세단)";
-                dailyRate = 55_000;
-            } else {
-                carType   = "모닝 / 스파크 (경차)";
-                dailyRate = 35_000;
-            }
-        }
-        return new CarTypeInfo(carType, dailyRate);
+    private java.util.Optional<CostBaseline.RentalTier> resolveCarType(TravelPlan travel) {
+        int members  = travel.getMemberCount() != null ? travel.getMemberCount() : 2;
+        int accScore = travel.getAccommodationScore();
+        return countryProfileRegistry.require(travel.getCountryCode())
+                .costBaseline()
+                .rental(members, accScore);
     }
 
     private TravelPlan getAccessibleTravel(Long userId, Long travelId) {

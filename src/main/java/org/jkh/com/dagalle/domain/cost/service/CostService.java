@@ -1,6 +1,7 @@
 package org.jkh.com.dagalle.domain.cost.service;
 
 import lombok.RequiredArgsConstructor;
+import org.jkh.com.dagalle.common.country.CountryProfileRegistry;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
 import org.jkh.com.dagalle.domain.accommodation.entity.Accommodation;
@@ -33,6 +34,7 @@ public class CostService {
     private final UserRepository userRepository;
     private final CarRentalRepository carRentalRepository;
     private final AccommodationRepository accommodationRepository;
+    private final CountryProfileRegistry countryProfileRegistry;
 
     @Transactional(readOnly = true)
     public CostSummaryResponse getSummary(Long userId, Long travelId) {
@@ -131,41 +133,16 @@ public class CostService {
     }
 
     /**
-     * 1인 왕복 항공료 규칙 기반 추정 (인천 출발 기준).
-     * 실제 항공권 API 미연동 시 평균 참고값.
+     * 1인 왕복 항공료 추정 (인천 출발 기준).
+     *
+     * <p>국가별 표는 {@link org.jkh.com.dagalle.common.country.CostBaseline}에 있다.
+     * 국가를 추가할 때 이 메서드는 고치지 않는다.
      */
     private int estimateFlightPerPersonKrw(String countryCode, String endLocation) {
         if (countryCode == null) return 0;
-        String loc = endLocation != null ? endLocation.toLowerCase() : "";
-
-        return switch (countryCode.toUpperCase()) {
-            case "JP" -> {
-                // 근거리: 후쿠오카·오사카·교토·나고야·히로시마 등 서일본
-                if (loc.contains("후쿠오카") || loc.contains("오사카") || loc.contains("교토") ||
-                    loc.contains("나고야") || loc.contains("히로시마") || loc.contains("나가사키") ||
-                    loc.contains("벳푸") || loc.contains("유후인") || loc.contains("구마모토") ||
-                    loc.contains("오키나와") || loc.contains("나하") || loc.contains("가고시마")) {
-                    yield 280_000;  // 근거리 서일본 왕복 평균
-                }
-                // 중거리: 도쿄·요코하마·나고야·가나자와
-                if (loc.contains("도쿄") || loc.contains("요코하마") || loc.contains("가나자와") ||
-                    loc.contains("하코네") || loc.contains("닛코") || loc.contains("가마쿠라")) {
-                    yield 360_000;  // 도쿄권 왕복 평균
-                }
-                // 원거리: 삿포로·홋카이도
-                yield 420_000;  // 홋카이도 등 원거리
-            }
-            case "KR" -> {
-                // 국내선 (김포·제주 등)
-                if (loc.contains("제주")) yield 130_000;
-                if (loc.contains("부산") || loc.contains("대구") || loc.contains("광주")) yield 90_000;
-                yield 80_000;
-            }
-            case "TH" -> 550_000;   // 방콕·치앙마이
-            case "VN" -> 480_000;   // 다낭·하노이
-            case "PH" -> 520_000;   // 세부·마닐라
-            default   -> 500_000;
-        };
+        return countryProfileRegistry.require(countryCode)
+                .costBaseline()
+                .flightRoundTripKrw(endLocation);
     }
 
     private TravelPlan getAccessibleTravel(Long userId, Long travelId) {

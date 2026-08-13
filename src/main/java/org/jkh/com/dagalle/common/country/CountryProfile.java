@@ -29,4 +29,7 @@ public interface CountryProfile {
 
     /** AI 프롬프트에 넣을 국가별 어휘. */
     AiPromptRule aiPromptRule();
+
+    /** 숙박·렌터카·항공료 기준선. AI가 아니라 코드가 계산하는 값들. */
+    CostBaseline costBaseline();
 }

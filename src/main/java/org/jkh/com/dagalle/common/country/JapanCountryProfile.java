@@ -17,6 +17,8 @@ public class JapanCountryProfile implements CountryProfile {
 
     private final ExchangeRateProvider exchangeRate;
     private final CostBaseline costBaseline = new JapanCostBaseline();
+    /** 상태가 없으므로 한 번만 만든다 — 프롬프트 조립마다 호출된다. */
+    private AiPromptRule promptRule;
 
     @Override
     public String countryCode() {
@@ -40,7 +42,10 @@ public class JapanCountryProfile implements CountryProfile {
 
     @Override
     public AiPromptRule aiPromptRule() {
-        return new JapanAiPromptRule(exchangeRate, costBaseline);
+        if (promptRule == null) {
+            promptRule = new JapanAiPromptRule(exchangeRate, costBaseline);
+        }
+        return promptRule;
     }
 
     /** 일본 어휘. 료칸·타베로그·신칸센처럼 일본에만 있는 표현을 담는다. */

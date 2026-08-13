@@ -1615,8 +1615,22 @@ public class AiScheduleService {
                 ]}""".formatted(dayNumber, d);
         }
 
-        // 기본 fallback (여행지 불명) — 국가별 샘플은 프로파일이 갖고 있다
-        return promptRule(countryCode).genericFallbackDayJson(dayNumber, d);
+        // 기본 fallback (여행지 불명) — 국가별 샘플은 프로파일이 갖고 있다.
+        //
+        // 여기서 require()를 쓰면 안 된다. 이 메서드는 Claude 호출이 실패했을 때 catch에서
+        // 불리는 최후 방어선이라, 국가를 몰라도 무언가는 돌려줘야 한다.
+        // 예외를 던지면 폴백이 폴백을 못 하게 된다.
+        return countryProfileRegistry.find(countryCode)
+                .map(p -> p.aiPromptRule().genericFallbackDayJson(dayNumber, d))
+                .orElseGet(() -> neutralFallbackDayJson(dayNumber, d));
+    }
+
+    /** 국가조차 알 수 없을 때의 최소 일정. 좌표 없이 시간표만 준다. */
+    private String neutralFallbackDayJson(int dayNumber, String date) {
+        return """
+            {"dayNumber":%d,"date":"%s","routes":[
+              {"fromLocation":{"name":"숙소","address":"","lat":0.0,"lng":0.0,"type":"HOTEL","description":"숙박지"},"toLocation":{"name":"인근 관광지","address":"","lat":0.0,"lng":0.0,"type":"ETC","description":"일정을 다시 생성해 주세요"},"transport":"WALK","departureTime":"09:30","durationMinutes":30,"estimatedCost":0,"note":"자동 생성 실패 — 재생성이 필요합니다"}
+            ]}""".formatted(dayNumber, date);
     }
     // ── 하드코딩 fallback 끝 ─────────────────────────────────────────
 

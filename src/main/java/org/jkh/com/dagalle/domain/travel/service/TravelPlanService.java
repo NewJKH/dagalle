@@ -3,9 +3,7 @@ package org.jkh.com.dagalle.domain.travel.service;
 import lombok.RequiredArgsConstructor;
 import org.jkh.com.dagalle.common.exception.BusinessException;
 import org.jkh.com.dagalle.common.exception.ErrorCode;
-import org.jkh.com.dagalle.common.websocket.WebSocketEventPublisher;
 import org.jkh.com.dagalle.domain.accommodation.repository.AccommodationRepository;
-import org.jkh.com.dagalle.domain.chat.repository.ChatMessageRepository;
 import org.jkh.com.dagalle.domain.location.entity.Location;
 import org.jkh.com.dagalle.domain.location.entity.LocationSource;
 import org.jkh.com.dagalle.domain.location.entity.LocationType;
@@ -51,10 +49,8 @@ public class TravelPlanService {
     private final PlanRouteRepository planRouteRepository;
     private final AccommodationRepository accommodationRepository;
     private final CarRentalRepository carRentalRepository;
-    private final ChatMessageRepository chatMessageRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
-    private final WebSocketEventPublisher publisher;
 
     @Transactional
     public TravelResponse create(Long userId, TravelCreateRequest request) {
@@ -162,7 +158,6 @@ public class TravelPlanService {
         planDayRepository.deleteByTravelPlanId(travelId);
         accommodationRepository.deleteByTravelPlan(travel);
         carRentalRepository.deleteByTravelPlan(travel);
-        chatMessageRepository.deleteByTravelPlanId(travelId);
         travelMemberRepository.deleteByTravelPlan(travel);
         travelPlanRepository.delete(travel);
     }
@@ -187,9 +182,7 @@ public class TravelPlanService {
         MemberRole role = request.getRole() != null ? request.getRole() : MemberRole.MEMBER;
         TravelMember member = travelMemberRepository.save(TravelMember.builder()
                 .travelPlan(travel).user(invitee).role(role).build());
-        MemberResponse resp = MemberResponse.from(member);
-        publisher.publishMemberUpdate(travelId, java.util.Map.of("type", "INVITED", "member", resp));
-        return resp;
+        return MemberResponse.from(member);
     }
 
     /** 강퇴 — 리더만 가능, 리더는 강퇴 불가 */
@@ -203,7 +196,6 @@ public class TravelPlanService {
         TravelMember member = travelMemberRepository.findByTravelPlanAndUser(travel, target)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         travelMemberRepository.delete(member);
-        publisher.publishMemberUpdate(travelId, java.util.Map.of("type", "KICKED", "userId", targetUserId));
     }
 
     /** 역할 변경 — 리더만 가능, 자기 자신 변경 불가, 마지막 리더 강등 불가 */
@@ -223,9 +215,7 @@ public class TravelPlanService {
             if (leaderCount <= 1) throw new BusinessException(ErrorCode.LAST_LEADER);
         }
         member.updateRole(request.getRole());
-        MemberResponse resp = MemberResponse.from(member);
-        publisher.publishMemberUpdate(travelId, java.util.Map.of("type", "ROLE_CHANGED", "member", resp));
-        return resp;
+        return MemberResponse.from(member);
     }
 
     /**
